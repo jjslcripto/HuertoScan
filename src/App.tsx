@@ -9,7 +9,6 @@ import {
   Coins,
   History,
   TrendingUp,
-  Trash2,
   Edit2,
   Check,
   ShoppingCart,
@@ -796,15 +795,6 @@ export default function App() {
                                   >
                                     {crop.isForSale ? "Puesto En Venta" : "Borrador"}
                                   </button>
-
-                                  <button
-                                    id={`delete-crop-${crop.id}`}
-                                    onClick={() => deleteCrop(crop.id)}
-                                    className="p-2 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 hover:border-rose-600 rounded-lg transition-all cursor-pointer"
-                                    title="Eliminar cultivo"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
                                 </>
                               )}
 
@@ -966,20 +956,12 @@ export default function App() {
                           Editar Ficha
                         </button>
                         <button
-                          id="delete-detail-crop-btn"
-                          onClick={() => deleteCrop(detailCrop.id)}
-                          className="text-xs text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 px-3 py-1.5 rounded-lg border border-rose-200 hover:border-rose-600 cursor-pointer transition-all flex items-center gap-1.5 font-bold"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Eliminar Cultivo
-                        </button>
-                        <button
                           id="close-detail-crop-btn"
                           onClick={() => {
                             setDetailCrop(null);
                             setIsEditingDetail(false);
                           }}
-                          className="text-xs text-slate-500 hover:text-slate-800 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 cursor-pointer"
+                          className="text-xs text-slate-500 hover:text-slate-805 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 cursor-pointer"
                         >
                           Ocultar Ficha
                         </button>
