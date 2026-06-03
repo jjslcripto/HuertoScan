@@ -6,7 +6,6 @@
 import React, { useState, useEffect } from "react";
 import {
   Sprout,
-  Plus,
   Coins,
   History,
   TrendingUp,
@@ -183,13 +182,7 @@ export default function App() {
     showToast("¡Ficha técnica guardada con éxito!", "success");
   };
 
-  // Formulario manual emergente rápido
-  const [showManualForm, setShowManualForm] = useState(false);
-  const [manualName, setManualName] = useState("");
-  const [manualSci, setManualSci] = useState("");
-  const [manualOrigin, setManualOrigin] = useState("");
-  const [manualDesc, setManualDesc] = useState("");
-  const [manualUses, setManualUses] = useState("");
+
 
   // Custom Confirm Dialog State
   const [confirmModal, setConfirmModal] = useState<{
@@ -283,45 +276,7 @@ export default function App() {
     showToast(`🌿 ¡Cultivo "${newCrop.name}" identificado y agregado a tu biblioteca!`, "success");
   };
 
-  // Formulario para guardado manual voluntario
-  const handleSaveManualCrop = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualName) return;
 
-    const newCrop: Crop = {
-      id: "crop-" + Math.random().toString(36).substring(2, 9),
-      name: manualName,
-      scientificName: manualSci || "Desconocido",
-      origin: manualOrigin || "Cultivado localmente de forma orgánica",
-      description: manualDesc || "Planta del huerto urbano cultivada con cariño.",
-      uses: manualUses || "Aporte nutritivo y culinario para ensaladas o guarniciones.",
-      careLevel: "Fácil",
-      sunlight: "Luz solar directa moderada",
-      waterRequirements: "Riego de 2 a 3 veces por semana",
-      harvestTime: "60-90 días estimativos",
-      recommendedPriceSol: 0.02,
-      recommendedPriceUsdc: 2.0,
-      recommendedPriceUsdt: 2.0,
-      priceSol: 0.02,
-      priceUsdc: 2.0,
-      priceUsdt: 2.0,
-      stock: 5,
-      imageUrl: "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&q=80&w=400",
-      scannedAt: new Date().toISOString(),
-      isForSale: true,
-      notes: "Registro manual del huerto comunitario."
-    };
-
-    setCrops((prev) => [newCrop, ...prev]);
-    setShowManualForm(false);
-    // Vaciar campos
-    setManualName("");
-    setManualSci("");
-    setManualOrigin("");
-    setManualDesc("");
-    setManualUses("");
-    showToast(`🌿 Cultivo "${newCrop.name}" creado con éxito.`, "success");
-  };
 
   // Modificar stock, precio o nombre de un cultivo en tu inventario
   const startEditing = (crop: Crop) => {
@@ -637,103 +592,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <button
-                  id="add-manual-crop-btn"
-                  onClick={() => setShowManualForm(!showManualForm)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  Agregar Manual
-                </button>
               </div>
-
-              {/* Formulario Manual Emergente Rápido */}
-              {showManualForm && (
-                <form
-                  id="manual-crop-form"
-                  onSubmit={handleSaveManualCrop}
-                  className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 mt-3 space-y-3"
-                >
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                    Registrar cultivo manualmente
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] text-slate-500 font-medium mb-1">Nombre Común *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej. Espinaca Orgánica"
-                        value={manualName}
-                        onChange={(e) => setManualName(e.target.value)}
-                        className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-500 font-medium mb-1">Nombre Científico</label>
-                      <input
-                        type="text"
-                        placeholder="Ej. Spinacia oleracea"
-                        value={manualSci}
-                        onChange={(e) => setManualSci(e.target.value)}
-                        className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] text-slate-500 font-medium mb-1">Origen / Historia</label>
-                      <input
-                        type="text"
-                        placeholder="Ej. Originario de Persia antigua"
-                        value={manualOrigin}
-                        onChange={(e) => setManualOrigin(e.target.value)}
-                        className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-500 font-medium mb-1">Usos / Su utilidad</label>
-                      <input
-                        type="text"
-                        placeholder="Ej. Culinaria, rica en hierro"
-                        value={manualUses}
-                        onChange={(e) => setManualUses(e.target.value)}
-                        className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-slate-500 font-medium mb-1">Descripción corta</label>
-                    <textarea
-                      placeholder="Ej. Hojas tiernas verdes cultivadas libre de fertilizantes sintéticos."
-                      value={manualDesc}
-                      onChange={(e) => setManualDesc(e.target.value)}
-                      rows={2}
-                      className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      id="cancel-manual-crop-btn"
-                      onClick={() => setShowManualForm(false)}
-                      className="text-xs text-slate-500 hover:text-slate-800 px-3 py-1.5 font-medium cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      id="save-manual-crop-btn"
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-1.5 rounded-lg transition-colors cursor-pointer"
-                    >
-                      Guardar Cultivo
-                    </button>
-                  </div>
-                </form>
-              )}
 
               {/* Contenido según la pestaña */}
               <div className="mt-4">
@@ -749,7 +608,7 @@ export default function App() {
                     {crops.length === 0 ? (
                       <div className="text-center py-10 bg-slate-50/50 rounded-xl border border-slate-100">
                         <p className="text-xs text-slate-500">
-                          Tu inventario está vacío. Usa el escáner de arriba para identificar una planta o agrégala de forma manual.
+                          Tu inventario está vacío. Usa el escáner de arriba para identificar una planta.
                         </p>
                       </div>
                     ) : (
