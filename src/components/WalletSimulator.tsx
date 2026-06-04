@@ -41,13 +41,15 @@ export default function WalletSimulator({ wallet, onChange }: WalletSimulatorPro
     setSelectedWalletName(walletName);
     // Generar llave pública simulada de Solana
     const randomPubkey = "Hwt8X" + Math.random().toString(36).substring(2, 10).toUpperCase() + "vS7pYvNuBrd9XW";
+    const currentNetwork = wallet.network || "devnet";
     onChange({
       connected: true,
       publicKey: randomPubkey,
-      balanceSol: 2.5, // 2.5 SOL para probar
-      balanceUsdc: 15.0, // 15 USDC
-      balanceUsdt: 10.0, // 10 USDT
+      balanceSol: currentNetwork === "mainnet" ? 1.45 : 2.50, // balances para distinguir Mainnet y Devnet
+      balanceUsdc: currentNetwork === "mainnet" ? 82.50 : 15.00,
+      balanceUsdt: currentNetwork === "mainnet" ? 54.10 : 10.00,
       hasVibePassNft: false, // Inicia sin pase de descuento para que puedan reclamarlo
+      network: currentNetwork,
     });
   };
 
@@ -60,6 +62,7 @@ export default function WalletSimulator({ wallet, onChange }: WalletSimulatorPro
       balanceUsdc: 0,
       balanceUsdt: 0,
       hasVibePassNft: false,
+      network: wallet.network || "devnet",
     });
   };
 
@@ -257,30 +260,71 @@ export default function WalletSimulator({ wallet, onChange }: WalletSimulatorPro
             )}
           </div>
 
+          {/* Selector interactivo de Red Solana (Devnet vs Mainnet) */}
+          <div id="solana-network-selector" className="bg-emerald-900/35 p-3.5 rounded-2xl border-2 border-emerald-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-fade-in">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-3 w-3 relative">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${wallet.network === "mainnet" ? "bg-purple-400" : "bg-emerald-400"}`}></span>
+                <span className={`relative inline-flex rounded-full h-3 w-3 ${wallet.network === "mainnet" ? "bg-purple-500" : "bg-emerald-500"}`}></span>
+              </span>
+              <div>
+                <span className="text-[9px] text-emerald-400 font-black block leading-none uppercase tracking-widest">PROPUESTA DE RED</span>
+                <span className="font-black text-xs text-white tracking-wide">
+                  {wallet.network === "mainnet" ? "🔴 SOLANA MAINNET BETA" : "🟢 SOLANA DEVNET"}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              id="toggle-network-btn"
+              onClick={() => {
+                const newNetwork = wallet.network === "mainnet" ? "devnet" : "mainnet";
+                onChange({
+                  ...wallet,
+                  network: newNetwork,
+                  balanceSol: newNetwork === "mainnet" ? 1.45 : 2.50,
+                  balanceUsdc: newNetwork === "mainnet" ? 82.50 : 15.00,
+                  balanceUsdt: newNetwork === "mainnet" ? 54.10 : 10.00
+                });
+              }}
+              className={`text-[10px] px-3 py-1.5 rounded-xl font-black transition-all cursor-pointer uppercase ${
+                wallet.network === "mainnet"
+                  ? "bg-amber-400 hover:bg-amber-350 text-emerald-950 border border-amber-500 shadow-[2px_2px_0px_0px_rgba(217,119,6,1)]"
+                  : "bg-purple-600 hover:bg-purple-500 text-white border border-purple-700 shadow-[2px_2px_0px_0px_rgba(88,28,135,1)]"
+              }`}
+            >
+              Cambiar a {wallet.network === "mainnet" ? "Devnet" : "Mainnet"}
+            </button>
+          </div>
+
           {/* Balances Display */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white/10 border border-white/10 p-3.5 rounded-2xl flex flex-col justify-between">
-              <span className="text-[9px] text-emerald-300 font-bold uppercase tracking-wider">SALDO SOL</span>
-              <span className="text-lg font-black text-yellow-400 font-mono mt-1 leading-none">
+            <div className="bg-yellow-400/10 border-2 border-yellow-400/40 p-3.5 rounded-2xl flex flex-col justify-between shadow-[0_0_15px_rgba(234,179,8,0.1)] relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-8 h-8 bg-yellow-400/10 rounded-bl-xl flex items-center justify-center font-bold text-[10px] text-yellow-400">
+                SOL
+              </div>
+              <span className="text-[9px] text-yellow-350 font-black uppercase tracking-wider">SALDO PRINCIPAL SOL</span>
+              <span className="text-xl font-black text-yellow-400 font-mono mt-1.5 leading-none">
                 {wallet.balanceSol} <span className="text-xs">SOL</span>
               </span>
-              <span className="text-[9px] text-emerald-400 font-bold mt-1">(~${(wallet.balanceSol * 180).toFixed(1)} USD)</span>
+              <span className="text-[9px] text-emerald-300 font-bold mt-1.5 font-mono">(~${(wallet.balanceSol * 180).toFixed(1)} USD)</span>
             </div>
 
             <div className="bg-white/10 border border-white/10 p-3.5 rounded-2xl flex flex-col justify-between">
               <span className="text-[9px] text-emerald-300 font-bold uppercase tracking-wider">SALDO USDC</span>
-              <span className="text-lg font-black text-emerald-400 font-mono mt-1 leading-none">
+              <span className="text-lg font-black text-emerald-400 font-mono mt-1.5 leading-none">
                 {wallet.balanceUsdc} <span className="text-xs">USDC</span>
               </span>
-              <span className="text-[9px] text-emerald-400 font-bold mt-1">Dólar Estable</span>
+              <span className="text-[9px] text-emerald-400 font-bold mt-1.5">Dólar Estable</span>
             </div>
 
             <div className="bg-white/10 border border-white/10 p-3.5 rounded-2xl flex flex-col justify-between">
               <span className="text-[9px] text-emerald-300 font-bold uppercase tracking-wider">SALDO USDT</span>
-              <span className="text-lg font-black text-teal-400 font-mono mt-1 leading-none">
+              <span className="text-lg font-black text-teal-400 font-mono mt-1.5 leading-none">
                 {wallet.balanceUsdt} <span className="text-xs font-sans">USDT</span>
               </span>
-              <span className="text-[9px] text-emerald-400 font-bold mt-1">Tether SPL</span>
+              <span className="text-[9px] text-emerald-400 font-bold mt-1.5">Tether SPL</span>
             </div>
           </div>
 

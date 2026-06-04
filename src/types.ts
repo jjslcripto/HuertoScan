@@ -49,4 +49,5 @@ export interface WalletState {
   balanceUsdc: number;
   balanceUsdt: number;
   hasVibePassNft: boolean; // El NFT del bootcamp para habilitar el 15% de descuento
+  network?: "devnet" | "mainnet";
 }

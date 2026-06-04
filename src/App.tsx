@@ -58,7 +58,8 @@ export default function App() {
     balanceSol: 0,
     balanceUsdc: 0,
     balanceUsdt: 0,
-    hasVibePassNft: false
+    hasVibePassNft: false,
+    network: "devnet"
   });
 
   // Estado del listado de transacciones
