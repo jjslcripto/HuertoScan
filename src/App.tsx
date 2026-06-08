@@ -25,9 +25,26 @@ import {
 } from "lucide-react";
 import { Crop, WalletState, SolanaTransaction } from "./types";
 import { PRESET_CROPS } from "./presetCrops";
+import { PRESET_TRANSACTIONS } from "./presetTransactions";
 import WalletSimulator from "./components/WalletSimulator";
 import PlantScanner from "./components/PlantScanner";
 import CheckoutGateway from "./components/CheckoutGateway";
+
+// Imagen de respaldo (SVG en línea) que se muestra cuando una URL de imagen
+// externa falla o ya no existe (404). Evita el ícono de "imagen rota".
+const FALLBACK_IMAGE =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" fill="#ecfdf5"/><g fill="none" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M80 116c0-28 16-48 44-52-4 28-20 44-44 52z"/><path d="M80 116c0-22-12-38-34-42 3 22 15 36 34 42z"/><path d="M80 122V92"/></g></svg>`
+  );
+
+// Reemplaza la imagen rota por el respaldo una sola vez (evita bucles de error).
+const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const img = e.currentTarget;
+  if (img.src !== FALLBACK_IMAGE) {
+    img.src = FALLBACK_IMAGE;
+  }
+};
 
 export default function App() {
   // Estado de los cultivos (inicializado desde localStorage o presetCrops)
@@ -73,7 +90,7 @@ export default function App() {
     } catch (err) {
       console.log("Error cargando transacciones:", err);
     }
-    return [];
+    return PRESET_TRANSACTIONS;
   });
 
   // Sincronizar transacciones con localStorage
@@ -631,6 +648,7 @@ export default function App() {
                                     src={editImageUrl || "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&q=80&w=400"}
                                     alt={editName || crop.name}
                                     referrerPolicy="no-referrer"
+                                    onError={handleImageError}
                                     className="w-full h-full object-cover"
                                   />
                                   <label className="absolute inset-0 bg-slate-900/60 flex flex-col items-center justify-center cursor-pointer opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-white" title="Subir foto">
@@ -685,6 +703,7 @@ export default function App() {
                                     src={crop.imageUrl}
                                     alt={crop.name}
                                     referrerPolicy="no-referrer"
+                                    onError={handleImageError}
                                     className="w-16 h-16 rounded-xl object-cover shrink-0"
                                   />
                                 )
@@ -841,6 +860,7 @@ export default function App() {
                                     src={crop.imageUrl}
                                     alt={crop.name}
                                     referrerPolicy="no-referrer"
+                                    onError={handleImageError}
                                     className="w-full h-full object-cover"
                                   />
                                   <span className="absolute top-2 right-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shadow-xs">
