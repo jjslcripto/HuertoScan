@@ -202,21 +202,26 @@ export default function App() {
       }
     );
 
-    // Initial check: if there are no crops owned by this user in Firestore, onboard presets/local crops
+    // Initial check: if there are no crops owned by this user in Firestore, onboard presets/local crops.
+    // Also, sync any newly scanned / upload-scanned crops from the local state that are not in Firestore.
     const checkAndOnboard = async () => {
       try {
         const qSnapshot = await getDocs(ownCropsQuery);
-        if (qSnapshot.empty) {
-          console.log("Onboarding user custom/preset crops to Firestore.");
-          const currentLocal = [...crops];
-          for (const item of currentLocal) {
-            // Upload copy under user's uid
+        const existingCloudIds = new Set(qSnapshot.docs.map(doc => doc.id));
+        
+        // Find which local crops are currently completely missing from their Firestore collection
+        const localUnsynced = crops.filter(c => !existingCloudIds.has(c.id));
+        
+        if (localUnsynced.length > 0) {
+          console.log(`Onboarding ${localUnsynced.length} unsynced crops to Firestore.`);
+          for (const item of localUnsynced) {
             const itemToUpload = { ...item, userId: user.uid };
             await setDoc(doc(db, "crops", item.id), itemToUpload);
           }
+          showToast(`☁️ Se han sincronizado ${localUnsynced.length} nuevos cultivos y fichas técnicas a Firebase.`, "success");
         }
       } catch (e) {
-        console.error("Migration error:", e);
+        console.error("Migration/Onboarding error:", e);
       }
     };
     checkAndOnboard();
@@ -878,6 +883,56 @@ export default function App() {
 
             {/* Escáner de Plantas con Inteligencia Artificial */}
             <PlantScanner onScanComplete={handleScanComplete} geminiConfigured={geminiConfigured} />
+
+            {/* Panel de Sincronización en la Base de Datos Firebase */}
+            <div id="firebase-sync-status-card" className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-2xs flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  Base de Datos Firebase
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${
+                  user ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
+                }`}>
+                  {user ? "Firebase Conectado" : "Almacenamiento Local"}
+                </span>
+              </div>
+              
+              {user ? (
+                <div className="flex items-start gap-2.5 text-xs text-left">
+                  <div className="bg-emerald-500/10 text-emerald-600 p-1.5 rounded-lg shrink-0 mt-0.5">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 leading-tight">Sincronización en la Nube Activa</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5 leading-normal">
+                      Las imágenes de tus escaneos, fotografías subidas y toda la información de la ficha botánica se guardan automáticamente en tu colección personal de Firebase Firestore.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 text-left">
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <div className="bg-amber-500/10 text-amber-600 p-1.5 rounded-lg shrink-0 mt-0.5">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-800 leading-tight">Guardado en la Nube Desactivado</p>
+                      <p className="text-slate-500 text-[11px] mt-0.5 leading-normal">
+                        Tus escaneos actuales se guardan de forma temporal en la caché del navegador. Inicia sesión con su cuenta para guardarlos permanentemente de manera segura en Firebase Firestore.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    id="firebase-login-banner-btn"
+                    onClick={handleGoogleLogin}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm border border-slate-950 font-sans uppercase tracking-wide"
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Ingresar con Google para activar Firebase
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Historial de Transacciones de Solana (Ledger) */}
             <div className="bg-white border border-slate-200/60 rounded-2xl p-5 shadow-2xs space-y-4">
@@ -1568,8 +1623,41 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                      <div className="space-y-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2">
+                      {/* Columna Izquierda: Imagen del espécimen y bitácora */}
+                      <div className="lg:col-span-4 space-y-4">
+                        <div className="bg-slate-100 p-1.5 rounded-2xl border-4 border-emerald-500 overflow-hidden shadow-inner relative flex items-center justify-center aspect-video sm:aspect-square">
+                          {detailCrop.imageUrl ? (
+                            <img
+                              src={detailCrop.imageUrl}
+                              alt={detailCrop.name}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover rounded-xl"
+                            />
+                          ) : (
+                            <div className="text-center text-slate-400 p-8">
+                              No hay imagen disponible
+                            </div>
+                          )}
+                          <div className="absolute bottom-3 right-3 bg-emerald-900/90 text-[10px] font-mono text-white px-2.5 py-1 rounded-md border border-emerald-700 shadow-sm font-bold uppercase tracking-wider">
+                            Imagen del Espécimen
+                          </div>
+                        </div>
+                        
+                        {detailCrop.notes && (
+                          <div className="bg-emerald-50 border border-emerald-100 p-3.5 rounded-xl">
+                            <span className="block text-[9px] font-black text-emerald-850 uppercase tracking-wider">
+                              Bitácora del Cultivo
+                            </span>
+                            <span className="text-[11px] text-slate-600 block mt-1 italic">
+                              "{detailCrop.notes}"
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Columna Central: Taxonomía y Distribución */}
+                      <div className="lg:col-span-4 space-y-4">
                         <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                           <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                             Nombre Científico Exacto
@@ -1598,7 +1686,8 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="space-y-4">
+                      {/* Columna Derecha: Usos, Cuidados y Precios */}
+                      <div className="lg:col-span-4 space-y-4">
                         <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 space-y-1">
                           <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                             Propiedades Principales (¿Para qué sirve?)

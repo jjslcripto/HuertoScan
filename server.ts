@@ -185,8 +185,31 @@ app.post("/api/scan", async (req, res) => {
             },
           },
           {
-            text: `Analiza esta imagen y determina de forma morfológica exacta qué planta del huerto o hortaliza es. Retorna un objeto JSON estructurado con la información detallada sobre este cultivo en español.
-Proporciona valores realistas para los precios de venta sugeridos en SOL, USDC y USDT considerando un huerto urbano comunitario libre de químicos. Es fundamental que identifiques exactamente el cultivo visible en la imagen de forma real y precisa.`,
+            text: `Analiza detalladamente esta imagen e identifica de forma morfológica exacta qué planta, hortaliza, fruta o hierba es. Es fundamental que analices minuciosamente el espécimen visible en la imagen: si es una planta completa, una fruta, un fruto, una hoja, una flor, una semilla, un tallo, una raíz, o cualquier tejido botánico, idéntificalo con máxima precisión y realismo, conservando fielmente la identidad del objeto observado.
+
+Retorna un objeto JSON estructurado con la información detallada en español. Debes rellenar rigurosamente los siguientes campos anatómicos y botánicos basándote en la morfología de la imagen y las características intrínsecas de la especie:
+- "name": Nombre común en español.
+- "scientificName": Nombre científico exacto en latín.
+- "origin": Origen geográfico e historia de difusión.
+- "description": Descripción morfológica general y física (silueta, colores visibles).
+- "uses": Usos culinarios, medicinales o comunitarios prácticos (¿Para qué sirve?).
+- "careLevel": Fácil, Moderado o Difícil.
+- "sunlight": Requerimientos de luz solar.
+- "waterRequirements": Pautas y frecuencia de riego.
+- "harvestTime": Ciclo de cosecha estimado.
+- "recommendedPriceSol", "recommendedPriceUsdc", "recommendedPriceUsdt": Precios de mercado sugeridos justos y lógicos.
+- "frutas": Análisis detallado de las frutas asociadas o si produce bayas carnosas.
+- "frutos": Estructura morfológica del fruto o producto cosechable final.
+- "hojas": Morfología detallada de las hojas (tipo, márgenes, cloroplastos, color y textura).
+- "clorofila": Análisis del mecanismo de fotosíntesis y contenido estimado de clorofila.
+- "raiz": Tipo de sistema radicular (pivotante, fasciculada, tubérculo, etc.) y anclaje.
+- "tallo": Tipo de tallo (herbáceo, leñoso, bulboso, etc.) y conducción.
+- "flor": Estructura de la flor, pétalos, reproducción y polinización.
+- "semilla": Características de las semillas y su propagación.
+- "savia": Tipo de savia (látex, acuosa, resinosa) y biofluidos internos.
+- "estomas": Comportamiento estomático e intercambio gaseoso (respirabilidad).
+
+El análisis debe ser 100% coherente con lo observado en la fotografía. No inventes un cultivo ramificado genérico si lo visible es una parte específica, descríbela contextualmente.`,
           },
         ],
       },
