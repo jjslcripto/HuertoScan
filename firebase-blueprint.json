@@ -2,176 +2,74 @@
   "entities": {
     "Crop": {
       "title": "Crop",
-      "description": "Una planta o cultivo de huerto escaneado, identificado y almacenado con toda su información botánica, morfológica y comercial.",
+      "description": "Represents an organic crop identified by botanical scanning and available for sale in the community market.",
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "ID unico del cultivo"
-        },
-        "name": {
-          "type": "string",
-          "description": "Nombre de la planta"
-        },
-        "scientificName": {
-          "type": "string",
-          "description": "Nombre cientifico"
-        },
-        "origin": {
-          "type": "string",
-          "description": "Region de origen"
-        },
-        "description": {
-          "type": "string",
-          "description": "Descripcion de la planta"
-        },
-        "uses": {
-          "type": "string",
-          "description": "Usos de la planta (para que sirve)"
-        },
-        "careLevel": {
-          "type": "string",
-          "description": "Dificultad de cultivo: Facil, Moderado o Dificil"
-        },
-        "sunlight": {
-          "type": "string",
-          "description": "Requisitos de sol"
-        },
-        "waterRequirements": {
-          "type": "string",
-          "description": "Requisitos de riego"
-        },
-        "harvestTime": {
-          "type": "string",
-          "description": "Tiempo de cosecha"
-        },
-        "recommendedPriceSol": {
-          "type": "number",
-          "description": "Precio sugerido en SOL"
-        },
-        "recommendedPriceUsdc": {
-          "type": "number",
-          "description": "Precio sugerido en USDC"
-        },
-        "recommendedPriceUsdt": {
-          "type": "number",
-          "description": "Precio sugerido en USDT"
-        },
-        "priceSol": {
-          "type": "number",
-          "description": "Precio fijado por el usuario"
-        },
-        "priceUsdc": {
-          "type": "number",
-          "description": "Precio fijado por el usuario"
-        },
-        "priceUsdt": {
-          "type": "number",
-          "description": "Precio fijado por el usuario"
-        },
-        "stock": {
-          "type": "number",
-          "description": "Stock del cultivo"
-        },
-        "imageUrl": {
-          "type": "string",
-          "description": "URL de la imagen"
-        },
-        "scannedAt": {
-          "type": "string",
-          "description": "Fecha y hora de escaneo (ISO string)"
-        },
-        "isForSale": {
-          "type": "boolean",
-          "description": "Si esta puesto a la venta en el mercado"
-        },
-        "notes": {
-          "type": "string",
-          "description": "Notas adicionales"
-        },
-        "userId": {
-          "type": "string",
-          "description": "ID del usuario propietario del cultivo (Firebase Auth UID)"
-        },
-        "frutas": {
-          "type": "string",
-          "description": "Estructuras de fructificacion dulces / carnosas si aplica"
-        },
-        "frutos": {
-          "type": "string",
-          "description": "Cuerpo del fruto y sus caracteristicas morfologicas"
-        },
-        "hojas": {
-          "type": "string",
-          "description": "Descripcion botanica de las hojas"
-        },
-        "clorofila": {
-          "type": "string",
-          "description": "Niveles de clorofila, pigmentacion y metabolismo"
-        },
-        "raiz": {
-          "type": "string",
-          "description": "Caracteristicas del sistema radicular"
-        },
-        "tallo": {
-          "type": "string",
-          "description": "Estructura del tallo o tronco"
-        },
-        "flor": {
-          "type": "string",
-          "description": "Descripcion de la inflorescencia o flores si aplica"
-        },
-        "semilla": {
-          "type": "string",
-          "description": "Propagacion, tipo de semilla y germinacion"
-        },
-        "savia": {
-          "type": "string",
-          "description": "Tipo de savia, flujo y propiedades protectoras"
-        },
-        "estomas": {
-          "type": "string",
-          "description": "Distribucion y comportamiento de los estomas para respiracion de la planta"
-        }
+        "id": { "type": "string", "description": "The unique identifier of the crop." },
+        "name": { "type": "string", "description": "The common name of the crop." },
+        "scientificName": { "type": "string", "description": "The botanical scientific name." },
+        "origin": { "type": "string", "description": "The geographic origin of the crop." },
+        "description": { "type": "string", "description": "Detailed description of the plant." },
+        "uses": { "type": "string", "description": "Common uses and benefits of the plant." },
+        "careLevel": { "type": "string", "description": "Fácil, Moderado, Difícil care difficulty." },
+        "sunlight": { "type": "string", "description": "Sunlight requirements." },
+        "waterRequirements": { "type": "string", "description": "Watering suggestions." },
+        "harvestTime": { "type": "string", "description": "Time until harvest." },
+        "recommendedPriceSol": { "type": "number", "description": "Recommended price in SOL." },
+        "recommendedPriceUsdc": { "type": "number", "description": "Recommended price in USDC." },
+        "recommendedPriceUsdt": { "type": "number", "description": "Recommended price in USDT." },
+        "priceSol": { "type": "number", "description": "User-set price in SOL." },
+        "priceUsdc": { "type": "number", "description": "User-set price in USDC." },
+        "priceUsdt": { "type": "number", "description": "User-set price in USDT." },
+        "stock": { "type": "integer", "description": "Available stock quantity." },
+        "imageUrl": { "type": "string", "description": "Optional image URL." },
+        "scannedAt": { "type": "string", "description": "ISO timestamp when scanned." },
+        "isForSale": { "type": "boolean", "description": "Whether the crop is currently for sale." },
+        "notes": { "type": "string", "description": "Optional notes from the cultivator." },
+        "userId": { "type": "string", "description": "Firebase Auth user ID of the owner." },
+        "frutas": { "type": "string" },
+        "frutos": { "type": "string" },
+        "hojas": { "type": "string" },
+        "clorofila": { "type": "string" },
+        "raiz": { "type": "string" },
+        "tallo": { "type": "string" },
+        "flor": { "type": "string" },
+        "semilla": { "type": "string" },
+        "savia": { "type": "string" },
+        "estomas": { "type": "string" }
       },
-      "required": [
-        "id",
-        "name",
-        "scientificName",
-        "origin",
-        "description",
-        "uses",
-        "careLevel",
-        "sunlight",
-        "waterRequirements",
-        "harvestTime",
-        "recommendedPriceSol",
-        "recommendedPriceUsdc",
-        "recommendedPriceUsdt",
-        "priceSol",
-        "priceUsdc",
-        "priceUsdt",
-        "stock",
-        "scannedAt",
-        "isForSale",
-        "userId",
-        "frutas",
-        "frutos",
-        "hojas",
-        "clorofila",
-        "raiz",
-        "tallo",
-        "flor",
-        "semilla",
-        "savia",
-        "estomas"
-      ]
+      "required": ["id", "name", "scientificName", "origin", "description", "uses", "careLevel", "sunlight", "waterRequirements", "harvestTime", "priceSol", "priceUsdc", "priceUsdt", "stock", "scannedAt", "isForSale"]
+    },
+    "SolanaTransaction": {
+      "title": "SolanaTransaction",
+      "description": "Represents a confirmed Solana Pay transaction within the community market.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The transaction identifier." },
+        "signature": { "type": "string", "description": "The blockchain signature." },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "buyerAddress": { "type": "string" },
+        "sellerAddress": { "type": "string" },
+        "cropId": { "type": "string" },
+        "cropName": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "tokenUsed": { "type": "string", "enum": ["SOL", "USDC", "USDT"] },
+        "totalAmountPaid": { "type": "number" },
+        "discountApplied": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["pending", "processing", "confirming", "success", "failed"] },
+        "userId": { "type": "string", "description": "The buyer's authenticated Firebase Auth user ID, if any." }
+      },
+      "required": ["id", "signature", "timestamp", "buyerAddress", "sellerAddress", "cropId", "cropName", "quantity", "tokenUsed", "totalAmountPaid", "discountApplied", "status"]
     }
   },
   "firestore": {
-    "/crops/{cropId}": {
+    "crops/{cropId}": {
       "schema": "Crop",
-      "description": "Coleccion global de cultivos guardados por los usuarios"
+      "description": "The root crops collection containing all custom-created or presets of crops for community garden."
+    },
+    "transactions/{transactionId}": {
+      "schema": "SolanaTransaction",
+      "description": "Ledger of confirmed purchases and payments on Solana Pay."
     }
   }
 }

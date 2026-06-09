@@ -34,9 +34,30 @@ import { PRESET_CROPS } from "./presetCrops";
 import WalletSimulator from "./components/WalletSimulator";
 import PlantScanner from "./components/PlantScanner";
 import CheckoutGateway from "./components/CheckoutGateway";
-import { auth, db, isFirebaseReady, googleProvider, handleFirestoreError, OperationType } from "./lib/firebase";
+
+// Firebase integrations
+import { auth, db } from "./firebase";
+import { handleFirestoreError, OperationType } from "./firebaseUtils";
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FireUser } from "firebase/auth";
+import { collection, doc, query, where, onSnapshot, setDoc, deleteDoc, getDocs, updateDoc } from "firebase/firestore";
 
 export default function App() {
+  // Firebase Auth states
+  const [user, setUser] = useState<FireUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [firebaseActive, setFirebaseActive] = useState(false);
+
+  // Helper to deduplicate crops when merging local and Firestore items
+  const deduplicateCrops = (list: Crop[]) => {
+    const seen = new Set();
+    return list.filter((c) => {
+      if (!c.id) return false;
+      if (seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
+  };
+
   // Estado de los cultivos (inicializado desde localStorage o presetCrops)
   const [crops, setCrops] = useState<Crop[]>(() => {
     try {
@@ -51,12 +72,13 @@ export default function App() {
     return PRESET_CROPS;
   });
 
-  // Sincronizar cultivos con localStorage
+  // Sincronizar cultivos con localStorage (only when offline)
   useEffect(() => {
+    if (firebaseActive) return;
     try {
       localStorage.setItem("solana_huerto_crops", JSON.stringify(crops));
     } catch (err) {}
-  }, [crops]);
+  }, [crops, firebaseActive]);
 
   // Estado de la Wallet de Solana
   const [wallet, setWallet] = useState<WalletState>({
@@ -69,7 +91,7 @@ export default function App() {
     network: "devnet"
   });
 
-  // Estado del listado de transacciones
+  // Estado del listado de transacciones (inicializado desde localStorage)
   const [transactions, setTransactions] = useState<SolanaTransaction[]>(() => {
     try {
       const saved = localStorage.getItem("solana_huerto_txs");
@@ -83,12 +105,128 @@ export default function App() {
     return [];
   });
 
-  // Sincronizar transacciones con localStorage
+  // Sincronizar transacciones con localStorage (only when offline)
   useEffect(() => {
+    if (firebaseActive) return;
     try {
       localStorage.setItem("solana_huerto_txs", JSON.stringify(transactions));
     } catch (err) {}
-  }, [transactions]);
+  }, [transactions, firebaseActive]);
+
+  // Auth synchronization listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+      setFirebaseActive(!!currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync crops and transactions from Firestore when Firebase authentication is active
+  useEffect(() => {
+    if (!firebaseActive || !user) return;
+
+    // Attach listeners strictly for authenticated user context:
+    // Query 1: User's owned crops
+    const ownCropsQuery = query(collection(db, "crops"), where("userId", "==", user.uid));
+    // Query 2: Public community marketplace crops
+    const publicCropsQuery = query(collection(db, "crops"), where("isForSale", "==", true));
+
+    const unsubscribeOwn = onSnapshot(
+      ownCropsQuery,
+      (snapshot) => {
+        const fetchedCrops: Crop[] = [];
+        snapshot.forEach((docSnap) => {
+          fetchedCrops.push({ ...docSnap.data() } as Crop);
+        });
+
+        setCrops((prev) => {
+          const updated = [...prev];
+          fetchedCrops.forEach((newC) => {
+            const idx = updated.findIndex((c) => c.id === newC.id);
+            if (idx >= 0) {
+              updated[idx] = newC;
+            } else {
+              updated.unshift(newC);
+            }
+          });
+          return deduplicateCrops(updated);
+        });
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, "crops_own");
+      }
+    );
+
+    const unsubscribePublic = onSnapshot(
+      publicCropsQuery,
+      (snapshot) => {
+        const fetchedCrops: Crop[] = [];
+        snapshot.forEach((docSnap) => {
+          fetchedCrops.push({ ...docSnap.data() } as Crop);
+        });
+
+        setCrops((prev) => {
+          const updated = [...prev];
+          fetchedCrops.forEach((newC) => {
+            const idx = updated.findIndex((c) => c.id === newC.id);
+            if (idx >= 0) {
+              updated[idx] = newC;
+            } else {
+              updated.unshift(newC);
+            }
+          });
+          return deduplicateCrops(updated);
+        });
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, "crops_public");
+      }
+    );
+
+    // Synchronize transactions where user is the buyer
+    const txQuery = query(collection(db, "transactions"), where("userId", "==", user.uid));
+    const unsubscribeTx = onSnapshot(
+      txQuery,
+      (snapshot) => {
+        const fetchedTxs: SolanaTransaction[] = [];
+        snapshot.forEach((docSnap) => {
+          fetchedTxs.push({ ...docSnap.data() } as SolanaTransaction);
+        });
+        fetchedTxs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setTransactions(fetchedTxs);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, "transactions");
+      }
+    );
+
+    // Initial check: if there are no crops owned by this user in Firestore, onboard presets/local crops
+    const checkAndOnboard = async () => {
+      try {
+        const qSnapshot = await getDocs(ownCropsQuery);
+        if (qSnapshot.empty) {
+          console.log("Onboarding user custom/preset crops to Firestore.");
+          const currentLocal = [...crops];
+          for (const item of currentLocal) {
+            // Upload copy under user's uid
+            const itemToUpload = { ...item, userId: user.uid };
+            await setDoc(doc(db, "crops", item.id), itemToUpload);
+          }
+        }
+      } catch (e) {
+        console.error("Migration error:", e);
+      }
+    };
+    checkAndOnboard();
+
+    return () => {
+      unsubscribeOwn();
+      unsubscribePublic();
+      unsubscribeTx();
+    };
+  }, [firebaseActive, user]);
 
   // Chequeo de conexión del API de Gemini en el backend
   const [geminiConfigured, setGeminiConfigured] = useState(false);
@@ -141,90 +279,6 @@ export default function App() {
   const [editDetailSemilla, setEditDetailSemilla] = useState("");
   const [editDetailSavia, setEditDetailSavia] = useState("");
   const [editDetailEstomas, setEditDetailEstomas] = useState("");
-
-  // Firebase Auth and sync states
-  const [user, setUser] = useState<any>(null);
-  const [syncing, setSyncing] = useState(false);
-
-  // Sync listener and login hooks
-  useEffect(() => {
-    if (isFirebaseReady() && auth) {
-      const unsubscribe = auth.onAuthStateChanged((currentUser) => {
-        setUser(currentUser);
-        if (currentUser) {
-          syncCropsFromFirestore(currentUser.uid);
-        } else {
-          // Revert to localStorage crops
-          try {
-            const saved = localStorage.getItem("solana_huerto_crops");
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              if (Array.isArray(parsed)) {
-                setCrops(parsed);
-                return;
-              }
-            }
-          } catch (e) {}
-          setCrops(PRESET_CROPS);
-        }
-      });
-      return () => unsubscribe();
-    }
-  }, []);
-
-  const syncCropsFromFirestore = async (uid: string) => {
-    if (!isFirebaseReady() || !db) return;
-    setSyncing(true);
-    try {
-      const { collection, getDocs, query, where } = await import("firebase/firestore");
-      const q = query(collection(db, "crops"), where("userId", "==", uid));
-      const querySnapshot = await getDocs(q);
-      const fsCrops: Crop[] = [];
-      querySnapshot.forEach((doc) => {
-        fsCrops.push(doc.data() as Crop);
-      });
-      if (fsCrops.length > 0) {
-        setCrops(fsCrops);
-        showToast("✓ Sincronizado con Firebase Firestore", "success");
-      } else {
-        // First login: upload local crops to represent persistent initial state
-        const { setDoc, doc: fsDoc } = await import("firebase/firestore");
-        for (const crop of crops) {
-          const updatedCrop = { ...crop, userId: uid };
-          await setDoc(fsDoc(db, "crops", crop.id), updatedCrop);
-        }
-        showToast("📤 Subiendo tus cultivos iniciales a Firebase", "info");
-      }
-    } catch (err) {
-      console.error("Error reading from Firestore:", err);
-      showToast("Error al conectar con la base de datos", "error");
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleLoginGoogle = async () => {
-    if (!isFirebaseReady() || !auth || !googleProvider) {
-      showToast("Falta configurar los términos de servicio de Firebase.", "error");
-      return;
-    }
-    try {
-      const { signInWithPopup } = await import("firebase/auth");
-      await signInWithPopup(auth, googleProvider);
-      showToast("Sesión iniciada correctamente", "success");
-    } catch (err) {
-      showToast("No se pudo iniciar sesión con Google", "error");
-    }
-  };
-
-  const handleLogout = async () => {
-    if (!isFirebaseReady() || !auth) return;
-    try {
-      const { signOut } = await import("firebase/auth");
-      await signOut(auth);
-      showToast("Sesión cerrada", "info");
-    } catch (err) {}
-  };
 
   const startEditingDetail = (crop: Crop) => {
     setIsEditingDetail(true);
@@ -286,9 +340,11 @@ export default function App() {
     });
 
     setCrops(updatedCrops);
-    try {
-      localStorage.setItem("solana_huerto_crops", JSON.stringify(updatedCrops));
-    } catch (err) {}
+    if (!firebaseActive) {
+      try {
+        localStorage.setItem("solana_huerto_crops", JSON.stringify(updatedCrops));
+      } catch (err) {}
+    }
 
     const freshDetailCrop = {
       ...detailCrop,
@@ -316,17 +372,11 @@ export default function App() {
 
     setDetailCrop(freshDetailCrop);
 
-    // Sync to Firestore if authenticated
-    if (isFirebaseReady() && auth?.currentUser && db) {
+    if (firebaseActive && user) {
       try {
-        const { doc, setDoc } = await import("firebase/firestore");
-        await setDoc(doc(db, "crops", detailCrop.id), {
-          ...freshDetailCrop,
-          userId: auth.currentUser.uid
-        });
-        showToast("✓ Cambios sincronizados de forma segura en Firebase Database", "success");
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `crops/${detailCrop.id}`);
+        await setDoc(doc(db, "crops", detailCrop.id), { ...freshDetailCrop, userId: user.uid });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.UPDATE, `crops/${detailCrop.id}`);
       }
     }
 
@@ -394,12 +444,56 @@ export default function App() {
     }, 4000);
   };
 
-  const resetAllCrops = () => {
+  // Google Login and Logout Handlers
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      showToast("🔑 Sesión iniciada con éxito con Google.", "success");
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      showToast("❌ Error al iniciar sesión con Google.", "error");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // Fallback to local storage values
+      const saved = localStorage.getItem("solana_huerto_crops");
+      if (saved) {
+        setCrops(JSON.parse(saved));
+      } else {
+        setCrops(PRESET_CROPS);
+      }
+      const savedTxs = localStorage.getItem("solana_huerto_txs");
+      if (savedTxs) {
+        setTransactions(JSON.parse(savedTxs));
+      } else {
+        setTransactions([]);
+      }
+      showToast("🔒 Sesión cerrada.", "info");
+    } catch (err) {
+      showToast("❌ Error al cerrar sesión.", "error");
+    }
+  };
+
+  const resetAllCrops = async () => {
     triggerConfirm(
       "Restablecer Biblioteca",
       "¿Estás seguro de que deseas restablecer tu biblioteca a los cultivos sugeridos inicialmente? Esto eliminará tus cultivos personalizados.",
-      () => {
+      async () => {
         setCrops(PRESET_CROPS);
+        if (firebaseActive && user) {
+          try {
+            // Write defaults under current UID
+            for (const c of PRESET_CROPS) {
+              await setDoc(doc(db, "crops", c.id), { ...c, userId: user.uid });
+            }
+          } catch (e) {
+            handleFirestoreError(e, OperationType.UPDATE, "crops_reset");
+          }
+        }
         showToast("🔄 Biblioteca restablecida con éxito.", "info");
       },
       true,
@@ -408,39 +502,49 @@ export default function App() {
   };
 
   const clearTransactions = () => {
-    triggerConfirm(
-      "Vaciar Historial",
-      "¿Deseas vaciar el historial de recibos de Solana Pay de forma definitiva?",
-      () => {
-        setTransactions([]);
-        showToast("🧹 Historial de transacciones vaciado.", "info");
-      },
-      true,
-      "Vaciar Historial"
-    );
+    if (firebaseActive) {
+      triggerConfirm(
+        "Vaciar Historial",
+        "¿Deseas vaciar los registros locales de Solana Pay? NOTA: Tu historial oficial en la nube permanecerá inmutable para auditoría criptográfica.",
+        () => {
+          setTransactions([]);
+          showToast("🧹 Historial local vaciado. Registros en la nube se mantienen inmutables.", "info");
+        },
+        true,
+        "Vaciar Historial"
+      );
+    } else {
+      triggerConfirm(
+        "Vaciar Historial",
+        "¿Deseas vaciar el historial de recibos de Solana Pay de forma definitiva?",
+        () => {
+          setTransactions([]);
+          showToast("🧹 Historial de transacciones vaciado.", "info");
+        },
+        true,
+        "Vaciar Historial"
+      );
+    }
   };
 
   // Agregar planta escaneada exitosamente por Gemini / Simulador
   const handleScanComplete = async (newCrop: Crop) => {
     let cropToSave = { ...newCrop };
     
-    if (isFirebaseReady() && auth?.currentUser && db) {
-      cropToSave.userId = auth.currentUser.uid;
-      try {
-        const { doc, setDoc } = await import("firebase/firestore");
-        await setDoc(doc(db, "crops", cropToSave.id), cropToSave);
-        showToast(`🌿 ¡"${cropToSave.name}" guardado de forma permanente en Firebase!`, "success");
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, "crops");
-      }
-    }
-    
     // Al escanear una planta, se agrega de primera en la lista de cultivos
     setCrops((prev) => [cropToSave, ...prev]);
     setDetailCrop(cropToSave);
-    if (!auth?.currentUser) {
-      showToast(`🌿 ¡Cultivo "${cropToSave.name}" identificado y agregado a tu biblioteca!`, "success");
+
+    if (firebaseActive && user) {
+      cropToSave.userId = user.uid;
+      try {
+        await setDoc(doc(db, "crops", cropToSave.id), cropToSave);
+      } catch (e) {
+        handleFirestoreError(e, OperationType.CREATE, `crops/${cropToSave.id}`);
+      }
     }
+    
+    showToast(`🌿 ¡Cultivo "${cropToSave.name}" identificado y agregado a tu biblioteca!`, "success");
   };
 
 
@@ -494,15 +598,11 @@ export default function App() {
       return prev;
     });
 
-    if (isFirebaseReady() && auth?.currentUser && db && updatedTargetCrop) {
+    if (firebaseActive && user && updatedTargetCrop) {
       try {
-        const { doc, setDoc } = await import("firebase/firestore");
-        await setDoc(doc(db, "crops", cropId), {
-          ...updatedTargetCrop,
-          userId: auth.currentUser.uid
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `crops/${cropId}`);
+        await setDoc(doc(db, "crops", cropId), { ...updatedTargetCrop, userId: user.uid });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.UPDATE, `crops/${cropId}`);
       }
     }
 
@@ -524,22 +624,21 @@ export default function App() {
     
     setCrops(updatedCrops);
 
-    if (isFirebaseReady() && auth?.currentUser && db && updatedTargetCrop) {
+    if (firebaseActive && user && updatedTargetCrop) {
       try {
-        const { doc, setDoc } = await import("firebase/firestore");
-        await setDoc(doc(db, "crops", cropId), {
-          ...updatedTargetCrop,
-          userId: auth.currentUser.uid
-        });
-        showToast(
-          updatedTargetCrop.isForSale
-            ? "🏪 Publicado en la vitrina del mercado"
-            : "📦 Retirado del mercado a modo borrador",
-          "info"
-        );
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `crops/${cropId}`);
+        await setDoc(doc(db, "crops", cropId), { ...updatedTargetCrop, userId: user.uid });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.UPDATE, `crops/${cropId}`);
       }
+    }
+
+    if (updatedTargetCrop) {
+      showToast(
+        updatedTargetCrop.isForSale
+          ? "🏪 Publicado en la vitrina del mercado"
+          : "📦 Retirado del mercado a modo borrador",
+        "info"
+      );
     }
   };
 
@@ -554,17 +653,15 @@ export default function App() {
           setDetailCrop(null);
         }
 
-        if (isFirebaseReady() && auth?.currentUser && db) {
+        if (firebaseActive && user) {
           try {
-            const { doc, deleteDoc } = await import("firebase/firestore");
             await deleteDoc(doc(db, "crops", cropId));
-            showToast(`🗑️ "${cropToDelete?.name || ""}" eliminado de la base de datos Firestore.`, "info");
-          } catch (err) {
-            handleFirestoreError(err, OperationType.DELETE, `crops/${cropId}`);
+          } catch (e) {
+            handleFirestoreError(e, OperationType.DELETE, `crops/${cropId}`);
           }
-        } else {
-          showToast(`🗑️ El cultivo "${cropToDelete?.name || ""}" ha sido eliminado de tu inventario.`, "info");
         }
+
+        showToast(`🗑️ El cultivo "${cropToDelete?.name || ""}" ha sido eliminado de tu inventario.`, "info");
       },
       true,
       "Eliminar"
@@ -572,15 +669,17 @@ export default function App() {
   };
 
   // El comprador completó con éxito el pago en Solana Pay
-  const handlePaymentSuccess = (tx: SolanaTransaction) => {
+  const handlePaymentSuccess = async (tx: SolanaTransaction) => {
     // 1. Agregar transacción al ledger histórico
     setTransactions((prev) => [tx, ...prev]);
 
     // 2. Descontar stock del cultivo correspondiente
+    const targetCrop = crops.find(c => c.id === tx.cropId);
+    const updatedStock = targetCrop ? Math.max(0, targetCrop.stock - tx.quantity) : 0;
+
     setCrops((prev) =>
       prev.map((c) => {
         if (c.id === tx.cropId) {
-          const updatedStock = Math.max(0, c.stock - tx.quantity);
           return { ...c, stock: updatedStock };
         }
         return c;
@@ -613,8 +712,20 @@ export default function App() {
     if (detailCrop && detailCrop.id === tx.cropId) {
       setDetailCrop((prev) => {
         if (!prev) return null;
-        return { ...prev, stock: Math.max(0, prev.stock - tx.quantity) };
+        return { ...prev, stock: updatedStock };
       });
+    }
+
+    // 5. Sync to Firebase Cloud Ledger & update stock securely
+    if (firebaseActive && user) {
+      try {
+        const txWithUser = { ...tx, userId: user.uid };
+        await setDoc(doc(db, "transactions", tx.id), txWithUser);
+        
+        await updateDoc(doc(db, "crops", tx.cropId), { stock: updatedStock });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `checkout_success`);
+      }
     }
 
     // Mostrar un toast exitoso de compra real en el huerto
@@ -653,53 +764,47 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Widget de Autenticación de Firebase */}
-            {isFirebaseReady() ? (
+            {/* Firebase Google Auth Panel */}
+            {authReady ? (
               user ? (
-                <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
-                  {user.photoURL ? (
+                <div id="firebase-user-panel" className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-xl">
+                  {user.photoURL && (
                     <img
                       src={user.photoURL}
-                      alt={user.displayName || "Usuario"}
+                      alt={user.displayName || "User"}
+                      className="w-6 h-6 rounded-full border border-slate-300 animate-fade-in"
                       referrerPolicy="no-referrer"
-                      className="w-7 h-7 rounded-full border-2 border-emerald-500"
                     />
-                  ) : (
-                    <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold font-mono">
-                      {user.displayName?.charAt(0) || "U"}
-                    </div>
                   )}
                   <div className="hidden md:flex flex-col text-left">
-                    <span className="text-[10px] font-black text-slate-800 leading-tight uppercase tracking-wider flex items-center gap-1">
-                      {user.displayName?.split(" ")[0] || "Miembro"}
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-bold text-slate-700 truncate max-w-[120px] leading-tight">
+                      {user.displayName || "Cultivador"}
                     </span>
-                    <span className="text-[9px] text-slate-400 font-mono truncate max-w-[110px]">
-                      Firestore Activo
+                    <span className="text-[9px] text-slate-400 leading-none truncate max-w-[120px]">
+                      {user.email}
                     </span>
                   </div>
                   <button
+                    id="firebase-logout-btn"
                     onClick={handleLogout}
-                    className="p-1.5 bg-slate-200/60 hover:bg-rose-50 text-slate-650 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
-                    title="Cerrar sesión"
+                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    title="Cerrar Sesión"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ) : (
                 <button
-                  onClick={handleLoginGoogle}
-                  className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-500 text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-2xs cursor-pointer"
+                  id="firebase-login-btn"
+                  onClick={handleGoogleLogin}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm uppercase tracking-wide font-mono border border-emerald-800"
                 >
-                  <Lock className="w-3.5 h-3.5" />
-                  Sincronizar Cloud
+                  <User className="w-3.5 h-3.5 block shrink-0" />
+                  Ingresar con Google
                 </button>
               )
             ) : (
-              <div className="text-[10px] text-slate-450 bg-slate-100 border border-slate-200 border-dashed rounded-xl px-2.5 py-1.5 font-mono flex items-center gap-1.5 font-bold">
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-                <span>Base de Datos Offline</span>
-              </div>
+              <span className="text-[10px] text-slate-400 font-mono animate-pulse">Cargando la nube...</span>
             )}
 
             <div className="hidden sm:flex text-right flex-col">
@@ -1362,10 +1467,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Campos de Edición de Estructuras Botánicas (Base de Datos) */}
+                    {/* Campos de Edición de Estructuras Botánicas (Base de Datos Local) */}
                     <div className="sm:col-span-2 border-t border-slate-100 pt-4 mt-2">
                       <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wrap mb-3">
-                        Edición de Atributos Botánicos Completo (Firestore Data Map)
+                        Edición de Atributos Botánicos Completo (Base de Datos Local)
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div>
@@ -1564,7 +1669,7 @@ export default function App() {
                     <div className="border-t border-slate-100 pt-5 mt-4">
                       <h4 className="text-xs font-black text-emerald-800 uppercase tracking-wider mb-3 flex items-center gap-1.5 font-sans">
                         <Layers className="w-4 h-4" />
-                        Análisis Morfológico y Botánico Completo (Firestore Cloud Guarded)
+                        Análisis Morfológico y Botánico Completo (Almacenamiento Local Seguro)
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">

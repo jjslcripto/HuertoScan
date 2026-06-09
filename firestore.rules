@@ -1,22 +1,19 @@
 rules_version = '2';
-service cloudfiles {
-  // Global safety catch-all
-}
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Default Deny
+    // Global Safety Net (Default Deny All)
     match /{document=**} {
       allow read, write: if false;
     }
     
-    // Helpers
+    // Global Security Helpers
     function isSignedIn() {
       return request.auth != null;
     }
     
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
     }
     
     function isValidId(id) {
@@ -30,63 +27,97 @@ service cloud.firestore {
     function existing() {
       return resource.data;
     }
-
-    // Validation helper for Crop
+    
+    // Validation Blueprint for Crop
     function isValidCrop(data) {
       return data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() <= 200
         && data.scientificName is string && data.scientificName.size() <= 200
-        && data.origin is string && data.origin.size() <= 1500
-        && data.description is string && data.description.size() <= 2500
-        && data.uses is string && data.uses.size() <= 2500
+        && data.origin is string && data.origin.size() <= 600
+        && data.description is string && data.description.size() <= 3000
+        && data.uses is string && data.uses.size() <= 1000
         && data.careLevel is string && data.careLevel.size() <= 50
         && data.sunlight is string && data.sunlight.size() <= 300
         && data.waterRequirements is string && data.waterRequirements.size() <= 300
         && data.harvestTime is string && data.harvestTime.size() <= 100
-        && (data.recommendedPriceSol is number || data.recommendedPriceSol is float)
-        && (data.recommendedPriceUsdc is number || data.recommendedPriceUsdc is float)
-        && (data.recommendedPriceUsdt is number || data.recommendedPriceUsdt is float)
-        && (data.priceSol is number || data.priceSol is float)
-        && (data.priceUsdc is number || data.priceUsdc is float)
-        && (data.priceUsdt is number || data.priceUsdt is float)
-        && data.stock is int
+        && data.priceSol is number && data.priceSol >= 0
+        && data.priceUsdc is number && data.priceUsdc >= 0
+        && data.priceUsdt is number && data.priceUsdt >= 0
+        && data.stock is int && data.stock >= 0
+        && (data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 10000000))
         && data.scannedAt is string && data.scannedAt.size() <= 100
-        && data.isForSale is bool
-        && data.userId is string && data.userId.size() <= 128
-        
-        // Botanical fields
-        && data.frutas is string && data.frutas.size() <= 2500
-        && data.frutos is string && data.frutos.size() <= 2500
-        && data.hojas is string && data.hojas.size() <= 2500
-        && data.clorofila is string && data.clorofila.size() <= 2500
-        && data.raiz is string && data.raiz.size() <= 2500
-        && data.tallo is string && data.tallo.size() <= 2500
-        && data.flor is string && data.flor.size() <= 2500
-        && data.semilla is string && data.semilla.size() <= 2500
-        && data.savia is string && data.savia.size() <= 2500
-        && data.estomas is string && data.estomas.size() <= 2500;
+        && data.isForSale is bool;
     }
-
+    
+    // Validation Blueprint for SolanaTransaction
+    function isValidTransaction(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.signature is string && data.signature.size() <= 200
+        && data.timestamp is string && data.timestamp.size() <= 100
+        && data.buyerAddress is string && data.buyerAddress.size() <= 128
+        && data.sellerAddress is string && data.sellerAddress.size() <= 128
+        && data.cropId is string && data.cropId.size() <= 128
+        && data.cropName is string && data.cropName.size() <= 200
+        && data.quantity is int && data.quantity >= 1
+        && data.tokenUsed is string && data.tokenUsed.size() <= 10
+        && data.totalAmountPaid is number && data.totalAmountPaid >= 0
+        && data.discountApplied is bool
+        && data.status is string && data.status.size() <= 50;
+    }
+    
+    // Crops Collection Rules
     match /crops/{cropId} {
-      // Users can view crops they own or those listed for sale on the marketplace
-      allow read: if isSignedIn() && (
-        resource.data.userId == request.auth.uid 
-        || resource.data.isForSale == true
+      // Secure List / Document Fetching: Anybody can read public forSale crops, or users can read their own
+      allow read: if (resource == null || resource.data.isForSale == true || (isSignedIn() && resource.data.userId == request.auth.uid));
+      
+      // Verification-enforced creation
+      allow create: if (
+        isSignedIn()
+        && isEmailVerified()
+        && isValidId(cropId)
+        && incoming().userId == request.auth.uid
+        && isValidCrop(incoming())
       );
       
-      // Users can create a crop only if they assign it to themselves and it passes validation
-      allow create: if isSignedIn() 
-        && isValidCrop(incoming())
-        && incoming().userId == request.auth.uid;
-        
-      // Users can edit or delete their own crops
-      allow update: if isSignedIn()
-        && isOwner(existing().userId)
-        && isValidCrop(incoming())
-        && incoming().userId == existing().userId; // Immutable ownership
-        
-      allow delete: if isSignedIn()
-        && isOwner(existing().userId);
+      // Tiered Identity Logic:
+      // Tier 1: The owner can modify the entire crop properties.
+      // Tier 2: A buyer (non-owner) can only decrement the available stock on checkout, and nothing else.
+      allow update: if (
+        isSignedIn()
+        && isEmailVerified()
+        && isValidId(cropId)
+        && (
+          (existing().userId == request.auth.uid && incoming().userId == request.auth.uid && isValidCrop(incoming()))
+          ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['stock']) && incoming().stock >= 0 && incoming().stock < existing().stock)
+        )
+      );
+      
+      // Deletion is strictly reserved to the owner
+      allow delete: if (
+        isSignedIn()
+        && isEmailVerified()
+        && isValidId(cropId)
+        && existing().userId == request.auth.uid
+      );
+    }
+    
+    // Transaction logs (Solana Pay payees ledger)
+    match /transactions/{transactionId} {
+      // Secure Query Enforcer (Only buyer can pull logs)
+      allow list, get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // Auth and verification required on transaction submission
+      allow create: if (
+        isSignedIn()
+        && isEmailVerified()
+        && isValidId(transactionId)
+        && incoming().userId == request.auth.uid
+        && isValidTransaction(incoming())
+      );
+      
+      // Transactions are read-only and immutable after creation
+      allow update, delete: if false;
     }
   }
 }

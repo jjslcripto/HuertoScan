@@ -1,27 +1,50 @@
-# Security Specifications for Crop Ledger
+# Firestore Security Specification & Invariants
 
 ## 1. Data Invariants
-- A Crop must have a valid `userId` representing its owner, matching the authenticated user.
-- No user can read, edit or delete another user's crops (unless marking isForSale which allows other users to view/list for purchase).
-- A Crop must have realistic numerical ranges for stock, prices, and timestamp.
-- Field types must strictly match standard specifications (strings for botanical fields, numbers for prices, isForSale as boolean).
+- **Crop Invariant**: A crop is owned by the user who created it (`userId == request.auth.uid`). Only the owner can delete or edit general properties of a crop.
+- **Stock Counter Invariant**: Non-owners can only perform stock updates (decreasing stock when buying). They must never modify the owner's details, pricing, name, or metadata.
+- **Transaction Invariant**: A transaction must record the authentic buyer's Firebase Auth UID. Transactions are immutable after creation and cannot be updated or deleted by clients.
+- **Identity Integrity**: For both crops and transactions, the creator's UID field must be verified using `request.auth.uid`.
 
-## 2. Theoretical Exploit Payloads ("The Dirty Dozen")
-1. **The Ghost Field (Shadow Update)**: Injecting `isVerifiedByAdmin: true` on edit.
-2. **Identity Spoofing**: Attempting to upload a crop with another user's `userId` as owner.
-3. **Price Poisoning**: Setting negative or extremely high float values for price or setting string value instead.
-4. **Stock Poisoning**: Setting double, subzero, or non-integral numbers for stock levels.
-5. **Timestamp Hijacking**: Setting a custom or future string as `scannedAt` instead of `request.time`.
-6. **Description Flooding**: Uploading a 5MB base64 string as text fields (such as `uses` or `description`).
-7. **Cross-User Injection**: Editing another user's private crop description when not the owner.
-8. **Malicious ID Injection**: Creating a crop with an ID containing shell characters.
-9. **Rogue Delete**: Discarding or deleting another user's crop.
-10. **State Shortcutting**: Updating `isForSale` to bypass the inventory rules without stock or price verification.
-11. **Anatomical Blanking**: Setting vital botanical parameters (like `raiz` or `clorofila`) to empty arrays or wrong types.
-12. **PII Exfiltration**: Attempting a bulk list or wildcard query of private profiles of other growers.
+---
 
-## 3. Security Rules Draft Concept
-Verify rules validate:
-1. `request.auth != null`
-2. `request.resource.data.userId == request.auth.uid`
-3. All fields match their type specification and strict keys are matching.
+## 2. The "Dirty Dozen" Threat Payloads (Adversarial Scenarios)
+
+1. **Privilege Escalation (Shadow Fields)**: Changing `userId` of a crop during update to hijack another user's crop.
+2. **Infinite Stock Generation**: A buyer updating the crop's `stock` field to a higher value than what currently exists.
+3. **Price Alteration**: A buyer updating the `priceSol` or `priceUsdc` field during check-out to buy a crop for free.
+4. **ID Poisoning / Buffer Overflow**: Writing an ID string of 1MB length as the `cropId` or `transactionId` to exhaust memory / exploit parser limits.
+5. **Unauthorized Crop Deletion**: Attempting to delete another user's crop.
+6. **Email Spoofing (Verification Bypass)**: An unverified user attempting write operations.
+7. **Identity Spoofing on Create**: Creating a crop with a fake `userId` different from the authenticated UID.
+8. **Transaction Tempering**: Attempting to update a settled transaction's amount, status, or discount.
+9. **Transaction Erasure**: Attempting to delete a transaction log to hide purchase activity.
+10. **Query Scraping / Blanket Reads**: Querying the entire transactions collection without filtering by the user's `userId`.
+11. **Malicious Image Payloads**: Putting a massive string or invalid data types into the `imageUrl` field.
+12. **Negative Stock Allocation**: Setting `stock` to a negative integer to break purchase validation.
+
+---
+
+## 3. Abstract Test Cases for Verification
+
+```ts
+// firestore.rules.test.ts (Conceptual Test Runner Schema)
+import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
+
+describe("Garden Security Rules", () => {
+  // 1. Forbids unauthenticated users from creating crops
+  it("rejects crop creation from logged-out users", async () => {
+    await assertFails(db.collection('crops').add({ name: 'Tomate', priceSol: 0.1 }));
+  });
+
+  // 2. Requires email verification
+  it("rejects crop updates from unverified users", async () => {
+    await assertFails(db.collection('crops').add({ userId: 'u123', name: 'Papa' }));
+  });
+
+  // 3. Prevent self-assigned ownership
+  it("rejects crop ownership spoofing", async () => {
+    await assertFails(db.collection('crops').doc('c1').set({ userId: 'other-user', name: 'Zanahoria' }));
+  });
+});
+```
