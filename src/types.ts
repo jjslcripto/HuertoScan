@@ -25,6 +25,19 @@ export interface Crop {
   scannedAt: string;
   isForSale: boolean;
   notes?: string;
+  userId?: string; // Firebase Auth User ID ownership
+
+  // Specialized botanical structure fields
+  frutas?: string;      // Frutas / frutos cultivados
+  frutos?: string;      // Morfología del fruto
+  hojas?: string;       // Morfología o características de las hojas
+  clorofila?: string;   // Información de clorofila y fotosíntesis
+  raiz?: string;        // Tipo y descripción de raíz
+  tallo?: string;       // Tipo y descripción de tallo
+  flor?: string;        // Estructura o descripción de flor
+  semilla?: string;     // Propagación por semillas
+  savia?: string;       // Savia y características internas
+  estomas?: string;     // Comportamiento de estomas y respiración
 }
 
 export interface SolanaTransaction {

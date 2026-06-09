@@ -428,7 +428,17 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
         isForSale: true,
         notes: isFallback 
           ? `Servicio de cortesía: ${resData.fallbackReason || "Servicio Gratuito de Gemini alcanzado"}`
-          : "Verificado y tasado por IA en la red de Solana Devnet."
+          : "Verificado y tasado por IA en la red de Solana Devnet.",
+        frutas: parsedData.frutas || "",
+        frutos: parsedData.frutos || "",
+        hojas: parsedData.hojas || "",
+        clorofila: parsedData.clorofila || "",
+        raiz: parsedData.raiz || "",
+        tallo: parsedData.tallo || "",
+        flor: parsedData.flor || "",
+        semilla: parsedData.semilla || "",
+        savia: parsedData.savia || "",
+        estomas: parsedData.estomas || ""
       };
 
       setLoading(false);

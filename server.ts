@@ -243,6 +243,46 @@ Proporciona valores realistas para los precios de venta sugeridos en SOL, USDC y
               type: Type.NUMBER,
               description: "Precio sugerido en USDT (ej. 3.25).",
             },
+            frutas: {
+              type: Type.STRING,
+              description: "Detalle sobre las frutas o bayas comestibles que produce o si no las tiene.",
+            },
+            frutos: {
+              type: Type.STRING,
+              description: "Descripción del fruto o producción final cosechable de la planta.",
+            },
+            hojas: {
+              type: Type.STRING,
+              description: "Morfología y tipo de hojas, márgenes, color y consistencia.",
+            },
+            clorofila: {
+              type: Type.STRING,
+              description: "Análisis técnico de concentración de clorofila y tipo de fotosíntesis.",
+            },
+            raiz: {
+              type: Type.STRING,
+              description: "Estructura radicular de la planta: fasciculada, pivotante, etc.",
+            },
+            tallo: {
+              type: Type.STRING,
+              description: "Estructura del tallo o tronco: herbáceo, leñoso, color y ramificaciones.",
+            },
+            flor: {
+              type: Type.STRING,
+              description: "Inflorescencia, pétalos, reproducción y floración si aplica.",
+            },
+            semilla: {
+              type: Type.STRING,
+              description: "Semillas, tipo, tamaño y recomendación de germinación.",
+            },
+            savia: {
+              type: Type.STRING,
+              description: "Tipo de savia (látex, resinosa, lechosa o transparente) y propiedades.",
+            },
+            estomas: {
+              type: Type.STRING,
+              description: "Composición estomática, respirabilidad e intercambio gaseoso.",
+            },
           },
           required: [
             "name",
@@ -257,6 +297,16 @@ Proporciona valores realistas para los precios de venta sugeridos en SOL, USDC y
             "recommendedPriceSol",
             "recommendedPriceUsdc",
             "recommendedPriceUsdt",
+            "frutas",
+            "frutos",
+            "hojas",
+            "clorofila",
+            "raiz",
+            "tallo",
+            "flor",
+            "semilla",
+            "savia",
+            "estomas",
           ],
         },
       },
@@ -287,7 +337,32 @@ Proporciona valores realistas para los precios de venta sugeridos en SOL, USDC y
     // En caso de cuotas agotadas (API rate-limiting 429) u otros errores de red/API,
     // se activa el motor de emparejamiento botánico local para garantizar un análisis y flujo ininterrumpidos.
     const randomIndex = Math.floor(Math.random() * FALLBACK_CROPS.length);
-    const fallbackCrop = FALLBACK_CROPS[randomIndex];
+    const fallbackTemplate = FALLBACK_CROPS[randomIndex];
+    
+    // Enriquecer el fallback con todas las propiedades botánicas requeridas por la base de datos
+    const fallbackCrop = {
+      ...fallbackTemplate,
+      frutas: fallbackTemplate.name.toLowerCase().includes("tomate") || fallbackTemplate.name.toLowerCase().includes("morrón")
+        ? "Produce bayas globosas carnosas, ricas en vitamina C y agua."
+        : "No produce frutos carnosos tipo fruta; es un cultivo principalmente foliar/aromático.",
+      frutos: fallbackTemplate.name.toLowerCase().includes("tomate")
+        ? "Tomate tipo baya en racimo, jugoso con abundantes semillas en gel."
+        : fallbackTemplate.name.toLowerCase().includes("morrón")
+        ? "Pimiento morrón carnoso, hueco por dentro, de color rojo maduro brillante."
+        : "Sin frutos comestibles carnosos; se cosechan sus tallos u hojas aromáticas tiernas.",
+      hojas: fallbackTemplate.name.toLowerCase().includes("albahaca")
+        ? "Hojas verdes ovadas, opuestas, brillantes, extremadamente perfumadas."
+        : fallbackTemplate.name.toLowerCase().includes("lechuga")
+        ? "Hojas crujientes verde brillante dispuestas en roseta basal compacta."
+        : "Hojas finas y alargadas de metabolismo activo.",
+      clorofila: "Metabolismo C3 sumamente eficiente con alta densidad de cloroplastos tipo A y B en células del mesófilo.",
+      raiz: "Sistema radicular ramificado con raíz pivotante central y raíces secundarias de alta capacidad de absorción.",
+      tallo: "Tallo herbáceo erecto con haces vasculares xilema y floema definidos.",
+      flor: "Flores hermafroditas con sépalos y pétalos característicos de la familia botánica.",
+      semilla: "Semillas diminutas de alta viabilidad. Requieren sustrato húmedo y temperatura de 20°C para germinar.",
+      savia: "Savia acuosa cargada de carbohidratos, minerales y reguladores de crecimiento endógenos.",
+      estomas: "Estomas de tipo anomocítico distribuidos principalmente en la epidermis abaxial para transpiración regulada."
+    };
 
     const errStr = error && typeof error === "object" ? (error.message || JSON.stringify(error) || "") : String(error || "");
     const errLower = errStr.toLowerCase();

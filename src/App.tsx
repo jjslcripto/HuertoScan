@@ -21,13 +21,20 @@ import {
   Droplet,
   Sun,
   AlertCircle,
-  Camera
+  Camera,
+  Trash2,
+  Lock,
+  User,
+  LogOut,
+  RefreshCw,
+  Sparkles
 } from "lucide-react";
 import { Crop, WalletState, SolanaTransaction } from "./types";
 import { PRESET_CROPS } from "./presetCrops";
 import WalletSimulator from "./components/WalletSimulator";
 import PlantScanner from "./components/PlantScanner";
 import CheckoutGateway from "./components/CheckoutGateway";
+import { auth, db, isFirebaseReady, googleProvider, handleFirestoreError, OperationType } from "./lib/firebase";
 
 export default function App() {
   // Estado de los cultivos (inicializado desde localStorage o presetCrops)
@@ -123,6 +130,102 @@ export default function App() {
   const [editDetailCare, setEditDetailCare] = useState("");
   const [editDetailNotes, setEditDetailNotes] = useState("");
 
+  // Estados para los 10 campos botánicos requeridos
+  const [editDetailFrutas, setEditDetailFrutas] = useState("");
+  const [editDetailFrutos, setEditDetailFrutos] = useState("");
+  const [editDetailHojas, setEditDetailHojas] = useState("");
+  const [editDetailClorofila, setEditDetailClorofila] = useState("");
+  const [editDetailRaiz, setEditDetailRaiz] = useState("");
+  const [editDetailTallo, setEditDetailTallo] = useState("");
+  const [editDetailFlor, setEditDetailFlor] = useState("");
+  const [editDetailSemilla, setEditDetailSemilla] = useState("");
+  const [editDetailSavia, setEditDetailSavia] = useState("");
+  const [editDetailEstomas, setEditDetailEstomas] = useState("");
+
+  // Firebase Auth and sync states
+  const [user, setUser] = useState<any>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // Sync listener and login hooks
+  useEffect(() => {
+    if (isFirebaseReady() && auth) {
+      const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+        setUser(currentUser);
+        if (currentUser) {
+          syncCropsFromFirestore(currentUser.uid);
+        } else {
+          // Revert to localStorage crops
+          try {
+            const saved = localStorage.getItem("solana_huerto_crops");
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed)) {
+                setCrops(parsed);
+                return;
+              }
+            }
+          } catch (e) {}
+          setCrops(PRESET_CROPS);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, []);
+
+  const syncCropsFromFirestore = async (uid: string) => {
+    if (!isFirebaseReady() || !db) return;
+    setSyncing(true);
+    try {
+      const { collection, getDocs, query, where } = await import("firebase/firestore");
+      const q = query(collection(db, "crops"), where("userId", "==", uid));
+      const querySnapshot = await getDocs(q);
+      const fsCrops: Crop[] = [];
+      querySnapshot.forEach((doc) => {
+        fsCrops.push(doc.data() as Crop);
+      });
+      if (fsCrops.length > 0) {
+        setCrops(fsCrops);
+        showToast("✓ Sincronizado con Firebase Firestore", "success");
+      } else {
+        // First login: upload local crops to represent persistent initial state
+        const { setDoc, doc: fsDoc } = await import("firebase/firestore");
+        for (const crop of crops) {
+          const updatedCrop = { ...crop, userId: uid };
+          await setDoc(fsDoc(db, "crops", crop.id), updatedCrop);
+        }
+        showToast("📤 Subiendo tus cultivos iniciales a Firebase", "info");
+      }
+    } catch (err) {
+      console.error("Error reading from Firestore:", err);
+      showToast("Error al conectar con la base de datos", "error");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleLoginGoogle = async () => {
+    if (!isFirebaseReady() || !auth || !googleProvider) {
+      showToast("Falta configurar los términos de servicio de Firebase.", "error");
+      return;
+    }
+    try {
+      const { signInWithPopup } = await import("firebase/auth");
+      await signInWithPopup(auth, googleProvider);
+      showToast("Sesión iniciada correctamente", "success");
+    } catch (err) {
+      showToast("No se pudo iniciar sesión con Google", "error");
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!isFirebaseReady() || !auth) return;
+    try {
+      const { signOut } = await import("firebase/auth");
+      await signOut(auth);
+      showToast("Sesión cerrada", "info");
+    } catch (err) {}
+  };
+
   const startEditingDetail = (crop: Crop) => {
     setIsEditingDetail(true);
     setEditDetailName(crop.name || "");
@@ -135,9 +238,20 @@ export default function App() {
     setEditDetailHarvest(crop.harvestTime || "");
     setEditDetailCare(crop.careLevel || "Fácil");
     setEditDetailNotes(crop.notes || "");
+
+    setEditDetailFrutas(crop.frutas || "");
+    setEditDetailFrutos(crop.frutos || "");
+    setEditDetailHojas(crop.hojas || "");
+    setEditDetailClorofila(crop.clorofila || "");
+    setEditDetailRaiz(crop.raiz || "");
+    setEditDetailTallo(crop.tallo || "");
+    setEditDetailFlor(crop.flor || "");
+    setEditDetailSemilla(crop.semilla || "");
+    setEditDetailSavia(crop.savia || "");
+    setEditDetailEstomas(crop.estomas || "");
   };
 
-  const saveDetailChanges = () => {
+  const saveDetailChanges = async () => {
     if (!detailCrop) return;
 
     const newName = editDetailName.trim() || detailCrop.name;
@@ -156,6 +270,16 @@ export default function App() {
           harvestTime: editDetailHarvest.trim(),
           careLevel: editDetailCare,
           notes: editDetailNotes.trim(),
+          frutas: editDetailFrutas.trim(),
+          frutos: editDetailFrutos.trim(),
+          hojas: editDetailHojas.trim(),
+          clorofila: editDetailClorofila.trim(),
+          raiz: editDetailRaiz.trim(),
+          tallo: editDetailTallo.trim(),
+          flor: editDetailFlor.trim(),
+          semilla: editDetailSemilla.trim(),
+          savia: editDetailSavia.trim(),
+          estomas: editDetailEstomas.trim(),
         };
       }
       return c;
@@ -163,10 +287,10 @@ export default function App() {
 
     setCrops(updatedCrops);
     try {
-      localStorage.setItem("bootcamp_crops", JSON.stringify(updatedCrops));
+      localStorage.setItem("solana_huerto_crops", JSON.stringify(updatedCrops));
     } catch (err) {}
 
-    setDetailCrop({
+    const freshDetailCrop = {
       ...detailCrop,
       name: newName,
       scientificName: editDetailSci.trim(),
@@ -178,7 +302,33 @@ export default function App() {
       harvestTime: editDetailHarvest.trim(),
       careLevel: editDetailCare,
       notes: editDetailNotes.trim(),
-    });
+      frutas: editDetailFrutas.trim(),
+      frutos: editDetailFrutos.trim(),
+      hojas: editDetailHojas.trim(),
+      clorofila: editDetailClorofila.trim(),
+      raiz: editDetailRaiz.trim(),
+      tallo: editDetailTallo.trim(),
+      flor: editDetailFlor.trim(),
+      semilla: editDetailSemilla.trim(),
+      savia: editDetailSavia.trim(),
+      estomas: editDetailEstomas.trim(),
+    };
+
+    setDetailCrop(freshDetailCrop);
+
+    // Sync to Firestore if authenticated
+    if (isFirebaseReady() && auth?.currentUser && db) {
+      try {
+        const { doc, setDoc } = await import("firebase/firestore");
+        await setDoc(doc(db, "crops", detailCrop.id), {
+          ...freshDetailCrop,
+          userId: auth.currentUser.uid
+        });
+        showToast("✓ Cambios sincronizados de forma segura en Firebase Database", "success");
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `crops/${detailCrop.id}`);
+      }
+    }
 
     setIsEditingDetail(false);
     showToast("¡Ficha técnica guardada con éxito!", "success");
@@ -271,11 +421,26 @@ export default function App() {
   };
 
   // Agregar planta escaneada exitosamente por Gemini / Simulador
-  const handleScanComplete = (newCrop: Crop) => {
+  const handleScanComplete = async (newCrop: Crop) => {
+    let cropToSave = { ...newCrop };
+    
+    if (isFirebaseReady() && auth?.currentUser && db) {
+      cropToSave.userId = auth.currentUser.uid;
+      try {
+        const { doc, setDoc } = await import("firebase/firestore");
+        await setDoc(doc(db, "crops", cropToSave.id), cropToSave);
+        showToast(`🌿 ¡"${cropToSave.name}" guardado de forma permanente en Firebase!`, "success");
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, "crops");
+      }
+    }
+    
     // Al escanear una planta, se agrega de primera en la lista de cultivos
-    setCrops((prev) => [newCrop, ...prev]);
-    setDetailCrop(newCrop);
-    showToast(`🌿 ¡Cultivo "${newCrop.name}" identificado y agregado a tu biblioteca!`, "success");
+    setCrops((prev) => [cropToSave, ...prev]);
+    setDetailCrop(cropToSave);
+    if (!auth?.currentUser) {
+      showToast(`🌿 ¡Cultivo "${cropToSave.name}" identificado y agregado a tu biblioteca!`, "success");
+    }
   };
 
 
@@ -289,26 +454,30 @@ export default function App() {
     setEditImageUrl(crop.imageUrl || "");
   };
 
-  const saveEditing = (cropId: string) => {
+  const saveEditing = async (cropId: string) => {
     let affectedCropName = "";
-    setCrops((prev) =>
-      prev.map((c) => {
-        if (c.id === cropId) {
-          affectedCropName = editName.trim() || c.name;
-          const usdEquivalent = editPriceSol * 180;
-          return {
-            ...c,
-            name: editName.trim() || c.name,
-            priceSol: +editPriceSol.toFixed(4),
-            priceUsdc: +usdEquivalent.toFixed(2) || 1.0,
-            priceUsdt: +usdEquivalent.toFixed(2) || 1.0,
-            stock: editStock,
-            imageUrl: editImageUrl.trim() || c.imageUrl
-          };
-        }
-        return c;
-      })
-    );
+    let updatedTargetCrop: Crop | null = null;
+
+    const updatedCrops = crops.map((c) => {
+      if (c.id === cropId) {
+        affectedCropName = editName.trim() || c.name;
+        const usdEquivalent = editPriceSol * 180;
+        const updated = {
+          ...c,
+          name: editName.trim() || c.name,
+          priceSol: +editPriceSol.toFixed(4),
+          priceUsdc: +usdEquivalent.toFixed(2) || 1.0,
+          priceUsdt: +usdEquivalent.toFixed(2) || 1.0,
+          stock: editStock,
+          imageUrl: editImageUrl.trim() || c.imageUrl
+        };
+        updatedTargetCrop = updated;
+        return updated;
+      }
+      return c;
+    });
+
+    setCrops(updatedCrops);
     setEditingCropId(null);
     setDetailCrop((prev) => {
       if (prev && prev.id === cropId) {
@@ -324,19 +493,54 @@ export default function App() {
       }
       return prev;
     });
+
+    if (isFirebaseReady() && auth?.currentUser && db && updatedTargetCrop) {
+      try {
+        const { doc, setDoc } = await import("firebase/firestore");
+        await setDoc(doc(db, "crops", cropId), {
+          ...updatedTargetCrop,
+          userId: auth.currentUser.uid
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `crops/${cropId}`);
+      }
+    }
+
     showToast(`💾 Valores actualizados para "${affectedCropName}".`, "success");
   };
 
   // Alternar el estado de poner en venta o quitar un cultivo del mercado
-  const toggleSaleState = (cropId: string) => {
-    setCrops((prev) =>
-      prev.map((c) => {
-        if (c.id === cropId) {
-          return { ...c, isForSale: !c.isForSale };
-        }
-        return c;
-      })
-    );
+  const toggleSaleState = async (cropId: string) => {
+    let updatedTargetCrop: Crop | null = null;
+    
+    const updatedCrops = crops.map((c) => {
+      if (c.id === cropId) {
+        const updated = { ...c, isForSale: !c.isForSale };
+        updatedTargetCrop = updated;
+        return updated;
+      }
+      return c;
+    });
+    
+    setCrops(updatedCrops);
+
+    if (isFirebaseReady() && auth?.currentUser && db && updatedTargetCrop) {
+      try {
+        const { doc, setDoc } = await import("firebase/firestore");
+        await setDoc(doc(db, "crops", cropId), {
+          ...updatedTargetCrop,
+          userId: auth.currentUser.uid
+        });
+        showToast(
+          updatedTargetCrop.isForSale
+            ? "🏪 Publicado en la vitrina del mercado"
+            : "📦 Retirado del mercado a modo borrador",
+          "info"
+        );
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `crops/${cropId}`);
+      }
+    }
   };
 
   const deleteCrop = (cropId: string) => {
@@ -344,12 +548,23 @@ export default function App() {
     triggerConfirm(
       "Eliminar Cultivo",
       `¿Estás seguro de que deseas eliminar el cultivo "${cropToDelete?.name || ""}" de tu biblioteca?`,
-      () => {
+      async () => {
         setCrops((prev) => prev.filter((c) => c.id !== cropId));
         if (detailCrop?.id === cropId) {
           setDetailCrop(null);
         }
-        showToast(`🗑️ El cultivo "${cropToDelete?.name || ""}" ha sido eliminado de tu inventario.`, "info");
+
+        if (isFirebaseReady() && auth?.currentUser && db) {
+          try {
+            const { doc, deleteDoc } = await import("firebase/firestore");
+            await deleteDoc(doc(db, "crops", cropId));
+            showToast(`🗑️ "${cropToDelete?.name || ""}" eliminado de la base de datos Firestore.`, "info");
+          } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `crops/${cropId}`);
+          }
+        } else {
+          showToast(`🗑️ El cultivo "${cropToDelete?.name || ""}" ha sido eliminado de tu inventario.`, "info");
+        }
       },
       true,
       "Eliminar"
@@ -438,8 +653,57 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Widget de Autenticación de Firebase */}
+            {isFirebaseReady() ? (
+              user ? (
+                <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName || "Usuario"}
+                      referrerPolicy="no-referrer"
+                      className="w-7 h-7 rounded-full border-2 border-emerald-500"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold font-mono">
+                      {user.displayName?.charAt(0) || "U"}
+                    </div>
+                  )}
+                  <div className="hidden md:flex flex-col text-left">
+                    <span className="text-[10px] font-black text-slate-800 leading-tight uppercase tracking-wider flex items-center gap-1">
+                      {user.displayName?.split(" ")[0] || "Miembro"}
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono truncate max-w-[110px]">
+                      Firestore Activo
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="p-1.5 bg-slate-200/60 hover:bg-rose-50 text-slate-650 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
+                    title="Cerrar sesión"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleLoginGoogle}
+                  className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-500 text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-2xs cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  Sincronizar Cloud
+                </button>
+              )
+            ) : (
+              <div className="text-[10px] text-slate-450 bg-slate-100 border border-slate-200 border-dashed rounded-xl px-2.5 py-1.5 font-mono flex items-center gap-1.5 font-bold">
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                <span>Base de Datos Offline</span>
+              </div>
+            )}
+
             <div className="hidden sm:flex text-right flex-col">
-              <span className="text-xs text-slate-500 font-mono">ESTADO CLUSTER</span>
+              <span className="text-xs text-slate-400 font-mono">ESTADO CLUSTER</span>
               <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1 justify-end">
                 <Check className="w-3" /> Solana Devnet Online
               </span>
@@ -796,6 +1060,15 @@ export default function App() {
                                   >
                                     {crop.isForSale ? "Puesto En Venta" : "Borrador"}
                                   </button>
+
+                                  <button
+                                    id={`delete-crop-${crop.id}`}
+                                    onClick={() => deleteCrop(crop.id)}
+                                    className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Eliminar cultivo"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 </>
                               )}
 
@@ -1088,6 +1361,105 @@ export default function App() {
                         />
                       </div>
                     </div>
+
+                    {/* Campos de Edición de Estructuras Botánicas (Base de Datos) */}
+                    <div className="sm:col-span-2 border-t border-slate-100 pt-4 mt-2">
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wrap mb-3">
+                        Edición de Atributos Botánicos Completo (Firestore Data Map)
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Frutas:</label>
+                          <input
+                            type="text"
+                            value={editDetailFrutas}
+                            onChange={(e) => setEditDetailFrutas(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Frutos:</label>
+                          <input
+                            type="text"
+                            value={editDetailFrutos}
+                            onChange={(e) => setEditDetailFrutos(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Hojas:</label>
+                          <input
+                            type="text"
+                            value={editDetailHojas}
+                            onChange={(e) => setEditDetailHojas(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-550 mb-0.5">Clorofila y Fotosíntesis:</label>
+                          <input
+                            type="text"
+                            value={editDetailClorofila}
+                            onChange={(e) => setEditDetailClorofila(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Raíz:</label>
+                          <input
+                            type="text"
+                            value={editDetailRaiz}
+                            onChange={(e) => setEditDetailRaiz(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Tallo:</label>
+                          <input
+                            type="text"
+                            value={editDetailTallo}
+                            onChange={(e) => setEditDetailTallo(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Flor:</label>
+                          <input
+                            type="text"
+                            value={editDetailFlor}
+                            onChange={(e) => setEditDetailFlor(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Semilla:</label>
+                          <input
+                            type="text"
+                            value={editDetailSemilla}
+                            onChange={(e) => setEditDetailSemilla(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Savia:</label>
+                          <input
+                            type="text"
+                            value={editDetailSavia}
+                            onChange={(e) => setEditDetailSavia(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Estomas:</label>
+                          <input
+                            type="text"
+                            value={editDetailEstomas}
+                            onChange={(e) => setEditDetailEstomas(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -1184,6 +1556,85 @@ export default function App() {
                               <span className="font-bold text-teal-600 block">${detailCrop.recommendedPriceUsdt}</span>
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Estructura Científica y Anatomía */}
+                    <div className="border-t border-slate-100 pt-5 mt-4">
+                      <h4 className="text-xs font-black text-emerald-800 uppercase tracking-wider mb-3 flex items-center gap-1.5 font-sans">
+                        <Layers className="w-4 h-4" />
+                        Análisis Morfológico y Botánico Completo (Firestore Cloud Guarded)
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🌿</span> <span>Hojas y Foliolo:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.hojas || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🔬</span> <span>Clorofila y Mecanismo Fotosintético:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.clorofila || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🪓</span> <span>Tallo y Haces Vasculares:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.tallo || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🥕</span> <span>Sistema Radicular (Raíz):</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.raiz || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🌸</span> <span>Flores e Inflorescencia:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.flor || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🍊</span> <span>Características del Fruto:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.frutos || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🍓</span> <span>Frutas asociadas:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.frutas || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🌰</span> <span>Semillas y Propagación:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.semilla || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🧪</span> <span>Savia y Biofluidos:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.savia || "No especificado / General"}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🌬️</span> <span>Distribución de Estomas:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.estomas || "No especificado / General"}</p>
                         </div>
                       </div>
                     </div>

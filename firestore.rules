@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloudfiles {
+  // Global safety catch-all
+}
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation helper for Crop
+    function isValidCrop(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.scientificName is string && data.scientificName.size() <= 200
+        && data.origin is string && data.origin.size() <= 1500
+        && data.description is string && data.description.size() <= 2500
+        && data.uses is string && data.uses.size() <= 2500
+        && data.careLevel is string && data.careLevel.size() <= 50
+        && data.sunlight is string && data.sunlight.size() <= 300
+        && data.waterRequirements is string && data.waterRequirements.size() <= 300
+        && data.harvestTime is string && data.harvestTime.size() <= 100
+        && (data.recommendedPriceSol is number || data.recommendedPriceSol is float)
+        && (data.recommendedPriceUsdc is number || data.recommendedPriceUsdc is float)
+        && (data.recommendedPriceUsdt is number || data.recommendedPriceUsdt is float)
+        && (data.priceSol is number || data.priceSol is float)
+        && (data.priceUsdc is number || data.priceUsdc is float)
+        && (data.priceUsdt is number || data.priceUsdt is float)
+        && data.stock is int
+        && data.scannedAt is string && data.scannedAt.size() <= 100
+        && data.isForSale is bool
+        && data.userId is string && data.userId.size() <= 128
+        
+        // Botanical fields
+        && data.frutas is string && data.frutas.size() <= 2500
+        && data.frutos is string && data.frutos.size() <= 2500
+        && data.hojas is string && data.hojas.size() <= 2500
+        && data.clorofila is string && data.clorofila.size() <= 2500
+        && data.raiz is string && data.raiz.size() <= 2500
+        && data.tallo is string && data.tallo.size() <= 2500
+        && data.flor is string && data.flor.size() <= 2500
+        && data.semilla is string && data.semilla.size() <= 2500
+        && data.savia is string && data.savia.size() <= 2500
+        && data.estomas is string && data.estomas.size() <= 2500;
+    }
+
+    match /crops/{cropId} {
+      // Users can view crops they own or those listed for sale on the marketplace
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || resource.data.isForSale == true
+      );
+      
+      // Users can create a crop only if they assign it to themselves and it passes validation
+      allow create: if isSignedIn() 
+        && isValidCrop(incoming())
+        && incoming().userId == request.auth.uid;
+        
+      // Users can edit or delete their own crops
+      allow update: if isSignedIn()
+        && isOwner(existing().userId)
+        && isValidCrop(incoming())
+        && incoming().userId == existing().userId; // Immutable ownership
+        
+      allow delete: if isSignedIn()
+        && isOwner(existing().userId);
+    }
+  }
+}
