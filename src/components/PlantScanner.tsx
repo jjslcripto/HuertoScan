@@ -52,6 +52,12 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
   const [cameraActive, setCameraActive] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
+  // Estados añadidos para selección de cámara, orientación y proporción de imagen exacta
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+  const [isFrontCamera, setIsFrontCamera] = useState(false);
+  const [videoFit, setVideoFit] = useState<"cover" | "contain">("cover");
+
   // Procesa, valida y comprime la imagen a JPEG con dimensiones razonables (máx 1024px)
   // Esto reduce drásticamente el peso del payload evitando "Payload Too Large" o lentitud de red
   const processAndResizeImage = (file: File): Promise<string> => {
@@ -187,50 +193,62 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === "videoinput");
-        
-        const hasLabels = videoDevices.some(d => d.label);
-        if (hasLabels && videoDevices.length > 0) {
-          const rgbWebcams = videoDevices.filter(d => {
-            const label = d.label.toLowerCase();
-            return !label.includes("ir ") && 
-                   !label.includes("infra") && 
-                   !label.includes("depth") && 
-                   !label.includes("hello") && 
-                   !label.includes("virtual");
-          });
-          
-          const chosenDevice = rgbWebcams.length > 0 ? rgbWebcams[0] : videoDevices[0];
-          console.log("Cámara seleccionada para HP EliteBook:", chosenDevice.label || "Por defecto");
-          
+        setAvailableDevices(videoDevices);
+
+        // Si ya hay una cámara seleccionada por el usuario anteriormente, intentar usar esa
+        if (selectedDeviceId && videoDevices.some(d => d.deviceId === selectedDeviceId)) {
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { 
-              deviceId: { exact: chosenDevice.deviceId },
+            video: {
+              deviceId: { exact: selectedDeviceId },
               width: { ideal: 1280 },
               height: { ideal: 720 }
             }
           });
         } else {
-          throw new Error("Labels not initialized yet");
+          const hasLabels = videoDevices.some(d => d.label);
+          if (hasLabels && videoDevices.length > 0) {
+            const rgbWebcams = videoDevices.filter(d => {
+              const label = d.label.toLowerCase();
+              return !label.includes("ir ") && 
+                     !label.includes("infra") && 
+                     !label.includes("depth") && 
+                     !label.includes("hello") && 
+                     !label.includes("virtual");
+            });
+            
+            const chosenDevice = rgbWebcams.length > 0 ? rgbWebcams[0] : videoDevices[0];
+            setSelectedDeviceId(chosenDevice.deviceId);
+            console.log("Cámara seleccionada:", chosenDevice.label || "Por defecto");
+            
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { 
+                deviceId: { exact: chosenDevice.deviceId },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              }
+            });
+          } else {
+            throw new Error("Labels not initialized yet");
+          }
         }
       } catch (err) {
-        console.warn("Fallo en la selección por dispositivo específico o permiso de etiquetas. Intentando con facingMode: user...", err);
+        console.warn("Fallo o etiquetas no inicializadas. Intentando con facingMode: environment para cámara trasera (ideal para plantas)...", err);
         
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }
+            video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
           });
-          console.log("Cámara integrada iniciada con éxito.");
-        } catch (errUser) {
-          console.warn("Fallo con facingMode: user. Intentando con back camera...", errUser);
+          console.log("Cámara trasera (environment) iniciada con éxito.");
+        } catch (errEnv) {
+          console.warn("Fallo con facingMode: environment. Intentando con facingMode: user...", errEnv);
           
           try {
             stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: "environment" }
+              video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }
             });
-            console.log("Cámara de respaldo iniciada.");
-          } catch (errEnv) {
-            console.warn("Fallo con facingMode: environment. Intentando configuración libre...", errEnv);
-            
+            console.log("Cámara frontal (user) iniciada.");
+          } catch (errUser) {
+            console.warn("Fallo con facingMode: user. Intentando configuración libre básica...", errUser);
             stream = await navigator.mediaDevices.getUserMedia({
               video: true
             });
@@ -250,10 +268,74 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
           console.log("[Escaner Info] Fallo al reproducir el flujo de video:", playErr);
         }
       }
+
+      // Una vez que el stream está activo, volvemos a listar dispositivos para capturar las etiquetas reales
+      try {
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        const vDevs = devs.filter((d) => d.kind === "videoinput");
+        setAvailableDevices(vDevs);
+
+        const activeTrack = stream.getVideoTracks()[0];
+        if (activeTrack) {
+          const settings = activeTrack.getSettings();
+          if (settings.deviceId) {
+            setSelectedDeviceId(settings.deviceId);
+          }
+          const trackLabel = (activeTrack.label || "").toLowerCase();
+          const isFront = trackLabel.includes("front") || 
+                          trackLabel.includes("user") || 
+                          trackLabel.includes("delantera") || 
+                          trackLabel.includes("integrada") ||
+                          settings.facingMode === "user";
+          setIsFrontCamera(isFront);
+        }
+      } catch (e) {
+        console.warn("No se pudieron enumerar las cámaras tras iniciar el stream:", e);
+      }
+
     } catch (err: any) {
       console.log("[Escaner Info] Error al iniciar dispositivo de captura de video:", err);
       setError("No pudimos acceder a tu cámara. Asegúrate de otorgar los permisos de cámara en tu navegador HP EliteBook o sube una fotografía desde tus archivos.");
       setActiveTab("upload");
+    }
+  };
+
+  const handleDeviceChange = async (deviceId: string) => {
+    stopCamera();
+    setSelectedDeviceId(deviceId);
+    
+    try {
+      setError("");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+      
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
+        await videoRef.current.play();
+      }
+      
+      const activeTrack = stream.getVideoTracks()[0];
+      if (activeTrack) {
+        const trackLabel = (activeTrack.label || "").toLowerCase();
+        const settings = activeTrack.getSettings();
+        const isFront = trackLabel.includes("front") || 
+                        trackLabel.includes("user") || 
+                        trackLabel.includes("delantera") || 
+                        trackLabel.includes("integrada") ||
+                        settings.facingMode === "user";
+        setIsFrontCamera(isFront);
+      }
+    } catch (err) {
+      console.error("Error al cambiar dispositivo de cámara:", err);
+      setError("No se pudo iniciar la cámara seleccionada. Intentando restablecer...");
+      startCamera();
     }
   };
 
@@ -299,7 +381,21 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
       if (context) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+
+        // Si el preview está espejado para que el usuario se centre de forma natural,
+        // aplicamos el mismo espejado al canvas para capturar la imagen exacta observada.
+        if (isFrontCamera) {
+          context.translate(canvas.width, 0);
+          context.scale(-1, 1);
+        }
+
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Restaurar estado de transformación original
+        if (isFrontCamera) {
+          context.setTransform(1, 0, 0, 1, 0, 0);
+        }
+
         const dataUrl = canvas.toDataURL("image/jpeg");
         setImagePreview(dataUrl);
         
@@ -360,7 +456,11 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
         imageUrl: imageSrc,
         scannedAt: new Date().toISOString(),
         isForSale: true,
-        notes: "Identificación rápida por catálogo de referencia simulada."
+        notes: "Identificación rápida por catálogo de referencia simulada.",
+        bioScanLayout: `• 🔍 Identificación General: ${template.name} (${template.scientificName})
+• 🌱 Órganos Detectados: Tallo, Hojas, Frutos (Visibles)
+• 🔬 Análisis Fisiológico (Clorofila/Savia/Estomas): Células foliares turgentes con metabolismo fotosintético activo. Alto índice de verdor indicativo de buena nutrición climatológica.
+• 📝 Nota de la Huerta Orgánica: Consejo simulado: Mantén la humedad periférica sin encharcar las raíces pivotantes locales.`
       };
       setLoading(false);
       setImagePreview(null);
@@ -429,10 +529,13 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
         notes: isFallback 
           ? `Servicio de cortesía: ${resData.fallbackReason || "Servicio Gratuito de Gemini alcanzado"}`
           : "Verificado y tasado por IA en la red de Solana Devnet.",
+        bioScanLayout: parsedData.bioScanLayout || "",
         frutas: parsedData.frutas || "",
         frutos: parsedData.frutos || "",
         hojas: parsedData.hojas || "",
-        clorofila: parsedData.clorofila || "",
+        clorofila: parsedData.clorofila || parsedData.clorofilia || "",
+        clorofilia: parsedData.clorofilia || parsedData.clorofila || "",
+        plantas: parsedData.plantas || "",
         raiz: parsedData.raiz || "",
         tallo: parsedData.tallo || "",
         flor: parsedData.flor || "",
@@ -473,13 +576,16 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
 
       {loading ? (
         /* Pantalla de Carga con efecto de escaneo fluorescente */
-        <div id="scanner-loading-screen" className="flex flex-col items-center justify-center py-12 px-4 space-y-5 bg-emerald-950 rounded-[24px] border-4 border-emerald-900 overflow-hidden h-72 relative">
+        <div id="scanner-loading-screen" className="flex flex-col items-center justify-center py-12 px-4 space-y-5 bg-emerald-950 rounded-[24px] border-4 border-emerald-900 overflow-hidden h-72 relative animate-pulse">
           {imagePreview && (
-            <img
-              src={imagePreview}
-              alt="Planta escaneada"
-              className="absolute inset-0 w-full h-full object-cover opacity-20 filter blur-xs"
-            />
+            <div className="absolute inset-0 w-full h-full">
+              <img
+                src={imagePreview}
+                alt="Planta escaneada"
+                className="w-full h-full object-cover opacity-45"
+              />
+              <div className="absolute inset-0 bg-linear-to-t from-emerald-950 via-emerald-950/70 to-emerald-950/40" />
+            </div>
           )}
 
           {/* Línea láser animada */}
@@ -532,7 +638,7 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
           </div>
 
           {error && (
-            <div id="scanner-error" className="bg-yellow-100 border-2 border-emerald-950 text-emerald-950 p-4 rounded-xl text-xs flex gap-2 items-center font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(6,78,59,1)]">
+            <div id="scanner-error" className="bg-yellow-105 border-2 border-emerald-950 text-emerald-950 p-4 rounded-xl text-xs flex gap-2 items-center font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(6,78,59,1)]">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
               <span>{error}</span>
             </div>
@@ -579,16 +685,66 @@ export default function PlantScanner({ onScanComplete, geminiConfigured }: Plant
           ) : (
             /* Cámara de Video en Vivo */
             <div className="space-y-3">
+              {/* Controles de cámara adicionales (Alternar cámara, Espejo, Ajuste de Visor) */}
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between bg-emerald-50 text-emerald-950 p-3.5 rounded-2xl border-2 border-emerald-100">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <span className="text-[9px] font-mono font-black text-emerald-900 uppercase tracking-tight whitespace-nowrap">Dispositivo:</span>
+                  {availableDevices.length > 1 ? (
+                    <select
+                      value={selectedDeviceId}
+                      onChange={(e) => handleDeviceChange(e.target.value)}
+                      className="text-[10px] font-bold bg-white text-emerald-955 border-2 border-emerald-250 rounded-lg px-2 py-1 max-w-[170px] truncate outline-hidden"
+                    >
+                      {availableDevices.map((device, idx) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Cámara ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-[10px] font-black text-emerald-955 bg-white/70 px-2.5 py-1 rounded-md border border-emerald-200 truncate max-w-[170px]">
+                      {availableDevices[0]?.label || "Cámara de la Laptop / HP"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setVideoFit((prev) => (prev === "cover" ? "contain" : "cover"))}
+                    className="text-[9px] font-black uppercase text-emerald-800 bg-white hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-250 transition-all cursor-pointer shadow-3xs"
+                    title="Alternar entre Relleno Completo y Proporción Real de la Cámara"
+                  >
+                    Encaje: {videoFit === "cover" ? "Llenar" : "Ajustar"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsFrontCamera((prev) => !prev)}
+                    className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border transition-all cursor-pointer shadow-3xs ${
+                      isFrontCamera
+                        ? "bg-emerald-600 text-white border-emerald-700 shadow-2xs"
+                        : "bg-white text-emerald-800 border-emerald-250 hover:bg-emerald-100"
+                    }`}
+                    title="Alternar el espejo horizontal del visor"
+                  >
+                    Espejo: {isFrontCamera ? "Sí" : "No"}
+                  </button>
+                </div>
+              </div>
+
               <div id="camera-stream-area" className="relative bg-emerald-950 rounded-[24px] overflow-hidden h-64 border-4 border-emerald-500 flex items-center justify-center shadow-lg">
                 <video
                   ref={videoRef}
                   playsInline
                   muted
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full transition-all ${
+                    videoFit === "cover" ? "object-cover" : "object-contain"
+                  } ${isFrontCamera ? "scale-x-[-1]" : ""}`}
                 />
 
-                {/* Guía en el centro */}
-                <div className="absolute inset-0 border-4 border-dashed border-emerald-400/40 m-6 pointer-events-none rounded-xl flex items-center justify-center">
+                {/* Guía en el centro con proporciones reales */}
+                <div className="absolute inset-0 border-4 border-dashed border-emerald-400/30 m-6 pointer-events-none rounded-xl flex items-center justify-center">
                   <div className="w-8 h-8 border-t-4 border-l-4 border-emerald-400 absolute top-0 left-0" />
                   <div className="w-8 h-8 border-t-4 border-r-4 border-emerald-400 absolute top-0 right-0" />
                   <div className="w-8 h-8 border-b-4 border-l-4 border-emerald-400 absolute bottom-0 left-0" />

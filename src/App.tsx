@@ -273,7 +273,8 @@ export default function App() {
   const [editDetailCare, setEditDetailCare] = useState("");
   const [editDetailNotes, setEditDetailNotes] = useState("");
 
-  // Estados para los 10 campos botánicos requeridos
+  // Estados para los 11 campos botánicos requeridos
+  const [editDetailPlantas, setEditDetailPlantas] = useState("");
   const [editDetailFrutas, setEditDetailFrutas] = useState("");
   const [editDetailFrutos, setEditDetailFrutos] = useState("");
   const [editDetailHojas, setEditDetailHojas] = useState("");
@@ -298,10 +299,11 @@ export default function App() {
     setEditDetailCare(crop.careLevel || "Fácil");
     setEditDetailNotes(crop.notes || "");
 
+    setEditDetailPlantas(crop.plantas || "");
     setEditDetailFrutas(crop.frutas || "");
     setEditDetailFrutos(crop.frutos || "");
     setEditDetailHojas(crop.hojas || "");
-    setEditDetailClorofila(crop.clorofila || "");
+    setEditDetailClorofila(crop.clorofila || crop.clorofilia || "");
     setEditDetailRaiz(crop.raiz || "");
     setEditDetailTallo(crop.tallo || "");
     setEditDetailFlor(crop.flor || "");
@@ -329,10 +331,12 @@ export default function App() {
           harvestTime: editDetailHarvest.trim(),
           careLevel: editDetailCare,
           notes: editDetailNotes.trim(),
+          plantas: editDetailPlantas.trim(),
           frutas: editDetailFrutas.trim(),
           frutos: editDetailFrutos.trim(),
           hojas: editDetailHojas.trim(),
           clorofila: editDetailClorofila.trim(),
+          clorofilia: editDetailClorofila.trim(),
           raiz: editDetailRaiz.trim(),
           tallo: editDetailTallo.trim(),
           flor: editDetailFlor.trim(),
@@ -363,10 +367,12 @@ export default function App() {
       harvestTime: editDetailHarvest.trim(),
       careLevel: editDetailCare,
       notes: editDetailNotes.trim(),
+      plantas: editDetailPlantas.trim(),
       frutas: editDetailFrutas.trim(),
       frutos: editDetailFrutos.trim(),
       hojas: editDetailHojas.trim(),
       clorofila: editDetailClorofila.trim(),
+      clorofilia: editDetailClorofila.trim(),
       raiz: editDetailRaiz.trim(),
       tallo: editDetailTallo.trim(),
       flor: editDetailFlor.trim(),
@@ -1529,6 +1535,15 @@ export default function App() {
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Plantas (Clasificación/Grupo):</label>
+                          <input
+                            type="text"
+                            value={editDetailPlantas}
+                            onChange={(e) => setEditDetailPlantas(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:bg-white"
+                          />
+                        </div>
+                        <div>
                           <label className="block text-[10px] text-slate-500 mb-0.5">Frutas:</label>
                           <input
                             type="text"
@@ -1623,6 +1638,21 @@ export default function App() {
                   </div>
                 ) : (
                   <>
+                    {/* BioScan Formatted Analysis Report */}
+                    {detailCrop.bioScanLayout && (
+                      <div className="bg-slate-950 border-4 border-emerald-500 rounded-3xl p-5 shadow-lg space-y-3 mb-5 text-left text-white animate-fade-in">
+                        <div className="flex items-center gap-2 border-b border-emerald-900/50 pb-2">
+                          <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
+                          <h4 className="font-mono font-bold text-xs uppercase tracking-wider text-emerald-400">
+                            BioScan • Informe de Análisis Científico
+                          </h4>
+                        </div>
+                        <div className="space-y-2.5 text-xs text-emerald-50 leading-relaxed font-sans whitespace-pre-line">
+                          {detailCrop.bioScanLayout}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2">
                       {/* Columna Izquierda: Imagen del espécimen y bitácora */}
                       <div className="lg:col-span-4 space-y-4">
@@ -1761,6 +1791,13 @@ export default function App() {
                         Análisis Morfológico y Botánico Completo (Almacenamiento Local Seguro)
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                          <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
+                            <span className="text-base">🌳</span> <span>Plantas o Tipo General:</span>
+                          </div>
+                          <p className="text-[11px] text-slate-550 leading-relaxed font-sans">{detailCrop.plantas || "No especificado / General"}</p>
+                        </div>
+
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
                           <div className="text-slate-700 text-xs font-bold flex items-center gap-1.5 font-sans">
                             <span className="text-base">🌿</span> <span>Hojas y Foliolo:</span>
