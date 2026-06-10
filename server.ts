@@ -185,44 +185,16 @@ app.post("/api/scan", async (req, res) => {
             },
           },
           {
-            text: `Eres "BioScan", un experto botánico de inteligencia artificial especializado en agricultura urbana y huertas orgánicas. Tu única tarea es analizar imágenes para identificar plantas, frutas, hojas y sus componentes morfológicos exactos.
-
-Sigue estrictamente estas reglas de análisis:
-1. CLASIFICACIÓN PRINCIPAL: Identifica el tipo de planta, fruta, fruto, flor o semilla que aparece en la imagen.
-2. DETECCIÓN MORFOLÓGICA CONCRETA: Analiza visualmente y confirma la presencia de los elementos botánicos si son visibles: Planta (General), Frutas/Frutos, Hojas, Raíz, Tallo, Flor, Semilla.
-3. ANÁLISIS DE PROCESOS/ESTRUCTURAS INTERNAS: Clorofila (verde, salud foliar), Savia (resina, látex), y Estomas (función de transpirabilidad).
-
-REGLA DE SEGURIDAD FRENTE A ERRORES (FALLBACK):
-Si el usuario selecciona o apunta con la cámara a un objeto que NO es una planta, parte de ella o un fruto (por ejemplo, un zapato, un rostro, una habitación), debes marcar isPlant como false y establecer fallbackError exactamente como: "⚠️ Objeto no reconocido. Por favor, enfoca o selecciona una imagen clara de una planta, hoja, flor, fruto, raíz o semilla para poder ayudarte con el escaneo de tu huerta."
-
-ESTRUCTURA DE RESPUESTA OBLIGATORIA (Si isPlant es true):
-El campo bioScanLayout debe contener un reporte en formato limpio, directo y fácil de leer (usa exactamente viñetas):
-• 🔍 Identificación General: [Nombre de la planta/fruto y variedad]
-• 🌱 Órganos Detectados: [Lista de elementos botánicos visibles]
-• 🔬 Análisis Fisiológico (Clorofila/Savia/Estomas): [Descripción de salud vegetal según el color, hidratación y características de la muestra]
-• 📝 Nota de la Huerta Orgánica: [Un consejo breve de cuidado, riego o abono basado en lo observado]`,
+            text: `Analiza esta imagen y determina de forma morfológica exacta qué planta del huerto o hortaliza es. Retorna un objeto JSON estructurado con la información detallada sobre este cultivo en español.
+Proporciona valores realistas para los precios de venta sugeridos en SOL, USDC y USDT considerando un huerto urbano comunitario libre de químicos. Es fundamental que identifiques exactamente el cultivo visible en la imagen de forma real y precisa.`,
           },
         ],
       },
       config: {
-        systemInstruction: `Eres "BioScan", un experto botánico de inteligencia artificial especializado en agricultura urbana y huertas orgánicas. Tu única tarea es analizar imágenes (subidas de la galería o capturadas en vivo por la cámara) para identificar plantas, frutas, hojas y sus componentes morfológicos exactos.
-Si la imagen NO muestra una planta, parte de ella o un fruto, marca "isPlant" como false, y llena "fallbackError" con "⚠️ Objeto no reconocido. Por favor, enfoca o selecciona una imagen clara de una planta, hoja, flor, fruto, raíz o semilla para poder ayudarte con el escaneo de tu huerta."`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            isPlant: {
-              type: Type.BOOLEAN,
-              description: "Indica si la imagen contiene de forma clara una planta, fruta, fruto, hoja, raíz, tallo, flor o semilla.",
-            },
-            fallbackError: {
-              type: Type.STRING,
-              description: "Mensaje de error exacto si isPlant es false. De lo contrario, dejar vacío.",
-            },
-            bioScanLayout: {
-              type: Type.STRING,
-              description: "Estructura de respuesta de 4 viñetas (Identificación General, Órganos Detectados, Análisis Fisiológico, Nota de la Huerta Orgánica).",
-            },
             name: {
               type: Type.STRING,
               description: "Nombre común de la planta en español (ej. Albahaca, Lechuga, Cebollín, Tomate).",
@@ -271,55 +243,8 @@ Si la imagen NO muestra una planta, parte de ella o un fruto, marca "isPlant" co
               type: Type.NUMBER,
               description: "Precio sugerido en USDT (ej. 3.25).",
             },
-            plantas: {
-              type: Type.STRING,
-              description: "Grupo botánico, clasificación o tipo de planta al que pertenece (ej. Angiosperma, Planta herbácea, Arbusto).",
-            },
-            frutas: {
-              type: Type.STRING,
-              description: "Detalle sobre las frutas o bayas comestibles que produce o si no las tiene.",
-            },
-            frutos: {
-              type: Type.STRING,
-              description: "Descripción del fruto o producción final cosechable de la planta.",
-            },
-            hojas: {
-              type: Type.STRING,
-              description: "Morfología y tipo de hojas, márgenes, color y consistencia.",
-            },
-            clorofila: {
-              type: Type.STRING,
-              description: "Análisis técnico de concentración de clorofila y tipo de fotosíntesis.",
-            },
-            raiz: {
-              type: Type.STRING,
-              description: "Estructura radicular de la planta: fasciculada, pivotante, etc.",
-            },
-            tallo: {
-              type: Type.STRING,
-              description: "Estructura del tallo o tronco: herbáceo, leñoso, color y ramificaciones.",
-            },
-            flor: {
-              type: Type.STRING,
-              description: "Inflorescencia, pétalos, reproducción y floración si aplica.",
-            },
-            semilla: {
-              type: Type.STRING,
-              description: "Semillas, tipo, tamaño y recomendación de germinación.",
-            },
-            savia: {
-              type: Type.STRING,
-              description: "Tipo de savia (látex, resinosa, lechosa o transparente) y propiedades.",
-            },
-            estomas: {
-              type: Type.STRING,
-              description: "Composición estomática, respirabilidad e intercambio gaseoso.",
-            },
           },
           required: [
-            "isPlant",
-            "fallbackError",
-            "bioScanLayout",
             "name",
             "scientificName",
             "origin",
@@ -332,17 +257,6 @@ Si la imagen NO muestra una planta, parte de ella o un fruto, marca "isPlant" co
             "recommendedPriceSol",
             "recommendedPriceUsdc",
             "recommendedPriceUsdt",
-            "plantas",
-            "frutas",
-            "frutos",
-            "hojas",
-            "clorofila",
-            "raiz",
-            "tallo",
-            "flor",
-            "semilla",
-            "savia",
-            "estomas",
           ],
         },
       },
@@ -354,16 +268,6 @@ Si la imagen NO muestra una planta, parte de ella o un fruto, marca "isPlant" co
     }
 
     const data = JSON.parse(resultText.trim());
-
-    // Validar si es una planta real según las instrucciones botánicas
-    if (data.isPlant === false || (data.fallbackError && data.fallbackError.length > 0)) {
-      res.status(400).json({
-        success: false,
-        error: data.fallbackError || "⚠️ Objeto no reconocido. Por favor, enfoca o selecciona una imagen clara de una planta, hoja, flor, fruto, raíz o semilla para poder ayudarte con el escaneo de tu huerta."
-      });
-      return;
-    }
-
     res.json({ success: true, data, fallback: false });
   } catch (error: any) {
     let friendlyError = "No se pudo conectar con el servicio de IA.";
@@ -383,39 +287,7 @@ Si la imagen NO muestra una planta, parte de ella o un fruto, marca "isPlant" co
     // En caso de cuotas agotadas (API rate-limiting 429) u otros errores de red/API,
     // se activa el motor de emparejamiento botánico local para garantizar un análisis y flujo ininterrumpidos.
     const randomIndex = Math.floor(Math.random() * FALLBACK_CROPS.length);
-    const fallbackTemplate = FALLBACK_CROPS[randomIndex];
-    
-    // Enriquecer el fallback con todas las propiedades botánicas requeridas por la base de datos
-    const fallbackCrop = {
-      ...fallbackTemplate,
-      bioScanLayout: `• 🔍 Identificación General: ${fallbackTemplate.name} (${fallbackTemplate.scientificName})
-• 🌱 Órganos Detectados: Tallo, Hojas, Frutos (Visibles)
-• 🔬 Análisis Fisiológico (Clorofila/Savia/Estomas): Tejido foliar activo con excelente hidratación celular. Abundante clorofila para estimulación fotosintética estable.
-• 📝 Nota de la Huerta Orgánica: Consejo local: Asegura un drenaje de sustrato arenoso y riego sutil matutino para maximizar el intercambio estomático de este espécimen de demostración.`,
-      plantas: fallbackTemplate.name.toLowerCase().includes("tomate") || fallbackTemplate.name.toLowerCase().includes("albahaca")
-        ? "Planta vascular terrestre de reino Plantae, Angiosperma."
-        : "Categorizado como Planta medicinal/hortícola de huerto doméstico.",
-      frutas: fallbackTemplate.name.toLowerCase().includes("tomate") || fallbackTemplate.name.toLowerCase().includes("morrón")
-        ? "Produce bayas globosas carnosas, ricas en vitamina C y agua."
-        : "No produce frutos carnosos tipo fruta; es un cultivo principalmente foliar/aromático.",
-      frutos: fallbackTemplate.name.toLowerCase().includes("tomate")
-        ? "Tomate tipo baya en racimo, jugoso con abundantes semillas en gel."
-        : fallbackTemplate.name.toLowerCase().includes("morrón")
-        ? "Pimiento morrón carnoso, hueco por dentro, de color rojo maduro brillante."
-        : "Sin frutos comestibles carnosos; se cosechan sus tallos u hojas aromáticas tiernas.",
-      hojas: fallbackTemplate.name.toLowerCase().includes("albahaca")
-        ? "Hojas verdes ovadas, opuestas, brillantes, extremadamente perfumadas."
-        : fallbackTemplate.name.toLowerCase().includes("lechuga")
-        ? "Hojas crujientes verde brillante dispuestas en roseta basal compacta."
-        : "Hojas finas y alargadas de metabolismo activo.",
-      clorofila: "Metabolismo C3 sumamente eficiente con alta densidad de cloroplastos tipo A y B en células del mesófilo.",
-      raiz: "Sistema radicular ramificado con raíz pivotante central y raíces secundarias de alta capacidad de absorción.",
-      tallo: "Tallo herbáceo erecto con haces vasculares xilema y floema definidos.",
-      flor: "Flores hermafroditas con sépalos y pétalos característicos de la familia botánica.",
-      semilla: "Semillas diminutas de alta viabilidad. Requieren sustrato húmedo y temperatura de 20°C para germinar.",
-      savia: "Savia acuosa cargada de carbohidratos, minerales y reguladores de crecimiento endógenos.",
-      estomas: "Estomas de tipo anomocítico distribuidos principalmente en la epidermis abaxial para transpiración regulada."
-    };
+    const fallbackCrop = FALLBACK_CROPS[randomIndex];
 
     const errStr = error && typeof error === "object" ? (error.message || JSON.stringify(error) || "") : String(error || "");
     const errLower = errStr.toLowerCase();
